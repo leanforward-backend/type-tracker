@@ -4,19 +4,19 @@
   font-weight: 400;
 
   color-scheme: dark;
-  
+
   /* Premium Dark Theme Palette */
   --bg-dark: #0a0a0a;
   --bg-card: #161616;
   --bg-input: #202020;
-  
+
   --text-primary: #ededed;
   --text-secondary: #a1a1a1;
   --text-muted: #525252;
 
   --accent-primary: #00f2ff; /* Cyan Neon */
   --accent-secondary: #7000ff; /* Purple Neon */
-  
+
   --color-success: #4ade80;
   --color-error: #ef4444;
   --color-warning: #f59e0b;
@@ -26,7 +26,7 @@
   --radius-lg: 16px;
 
   --shadow-glow: 0 0 20px rgba(0, 242, 255, 0.15);
-  
+
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -62,7 +62,8 @@ body {
   background: var(--bg-card);
   border-radius: var(--radius-lg);
   padding: 2rem;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06);
   border: 1px solid #262626;
 }
 
@@ -101,7 +102,11 @@ body {
 .title {
   font-size: 3.2em;
   line-height: 1.1;
-  background: linear-gradient(to right, var(--accent-primary), var(--accent-secondary));
+  background: linear-gradient(
+    to right,
+    var(--accent-primary),
+    var(--accent-secondary)
+  );
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -110,7 +115,7 @@ body {
 
 /* Game Styles */
 .typing-area {
-  font-family: 'Roboto Mono', monospace;
+  font-family: "Roboto Mono", monospace;
   font-size: 1.5rem;
   line-height: 2rem;
   text-align: left;
@@ -139,19 +144,28 @@ body {
 }
 
 .char.current::after {
-  content: '';
+  content: "";
   position: absolute;
   left: 0;
   bottom: -2px;
   width: 100%;
   height: 2px;
   background-color: var(--accent-primary);
+}
+
+.card:focus .char.current::after,
+.card:focus-within .char.current::after {
   animation: blink 1s infinite;
 }
 
 @keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
 }
 
 .stats-grid {

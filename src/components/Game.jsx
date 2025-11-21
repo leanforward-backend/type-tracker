@@ -1,32 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-
-const SENTENCES = [
-  // General / Concepts
-  "Clean code always looks like it was written by someone who cares.",
-  "Premature optimization is the root of all evil in programming.",
-  "Recursion is a method where the solution depends on solutions to smaller instances of the same problem.",
-  "A closure is the combination of a function bundled together with references to its surrounding state.",
-  "Big O notation is used to classify algorithms according to how their run time or space requirements grow.",
-
-  // Frontend
-  "React components implement a render method that takes input data and returns what to display.",
-  "CSS Grid Layout excels at dividing a page into major regions or defining the relationship in terms of size, position, and layer.",
-  "The Document Object Model is a cross-platform and language-independent interface that treats an XML or HTML document as a tree structure.",
-  "Event bubbling describes how the browser handles events targeted at nested elements.",
-  "TypeScript adds static typing to JavaScript to enable better tooling and catch errors early.",
-
-  // Backend / Database
-  "RESTful APIs use standard HTTP methods like GET, POST, PUT, and DELETE to perform operations on resources.",
-  "SQL injection is a code injection technique that might destroy your database.",
-  "Normalization is the process of organizing data in a database to reduce redundancy and improve data integrity.",
-  "Node.js is a JavaScript runtime built on Chrome's V8 JavaScript engine.",
-  "ACID properties ensure that database transactions are processed reliably.",
-
-  // DevOps / Tools
-  "Git is a distributed version control system for tracking changes in source code during software development.",
-  "Docker containers wrap up a piece of software in a complete filesystem that contains everything it needs to run.",
-  "Continuous Integration is the practice of merging all developers' working copies to a shared mainline several times a day.",
-];
+import { SENTENCES } from "./Sentences";
 
 export default function Game({ onFinish }) {
   const [text, setText] = useState("");
