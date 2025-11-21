@@ -1,11 +1,4 @@
-import { SignInButton, UserButton } from "@clerk/clerk-react";
-import {
-  Authenticated,
-  Unauthenticated,
-  useConvexAuth,
-  useMutation,
-  useQuery,
-} from "convex/react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 import { api } from "../convex/_generated/api";
 import "./App.css";
@@ -33,8 +26,12 @@ function App() {
     }
   };
 
+  const raceHistory = useQuery(api.races.getHistory);
+
   const tasks = useQuery(api.tasks.get);
   const createTask = useMutation(api.tasks.create);
+
+  const displayHistory = isAuthenticated && raceHistory ? raceHistory : history;
 
   return (
     <div className="app-container">
@@ -42,7 +39,7 @@ function App() {
         style={{
           marginBottom: "3rem",
           display: "grid",
-          gridTemplateColumns: "1fr auto 1fr",
+          gridTemplateColumns: "1fr auto",
           alignItems: "center",
           padding: "1rem",
         }}
@@ -51,7 +48,6 @@ function App() {
           <h1 className="title" style={{ fontSize: "2.5rem", margin: 0 }}>
             Type<span style={{ color: "var(--text-primary)" }}>Tracker</span>
           </h1>
-          {/* Optional: Keep tasks debug info here or move it */}
           <div
             className="title"
             style={{ fontSize: "1rem", margin: 0, marginLeft: "20px" }}
@@ -59,8 +55,8 @@ function App() {
             {tasks === undefined ? (
               <div>Loading tasks...</div>
             ) : tasks.length === 0 ? (
-              <button onClick={() => createTask({ text: "Sample Task" })}>
-                Add Sample Task
+              <button onClick={() => createTask({ text: ":)" })}>
+                Click Me
               </button>
             ) : (
               tasks.map(({ _id, text }) => <div key={_id}>{text}</div>)
@@ -82,17 +78,6 @@ function App() {
             Stats
           </button>
         </nav>
-
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <Unauthenticated>
-            <SignInButton mode="modal">
-              <button className="btn">Sign In</button>
-            </SignInButton>
-          </Unauthenticated>
-          <Authenticated>
-            <UserButton />
-          </Authenticated>
-        </div>
       </header>
 
       <main>
@@ -100,7 +85,7 @@ function App() {
           <Game onFinish={handleGameFinish} />
         ) : (
           <Stats
-            history={history}
+            history={displayHistory}
             problemKeys={getProblemKeys()}
             problemWords={getProblemWords()}
           />

@@ -8,7 +8,7 @@ export default defineSchema({
     userId: v.optional(v.string()),
   }),
   races: defineTable({
-    userId: v.optional(v.string()),
+    userId: v.string(),
     wpm: v.number(),
     accuracy: v.number(),
     date: v.optional(v.string()),

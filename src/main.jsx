@@ -1,5 +1,14 @@
-import { ClerkProvider, useAuth } from "@clerk/clerk-react";
-import { ConvexReactClient } from "convex/react";
+import {
+  ClerkProvider,
+  SignInButton,
+  useAuth,
+  UserButton,
+} from "@clerk/clerk-react";
+import {
+  Authenticated,
+  ConvexReactClient,
+  Unauthenticated,
+} from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -20,6 +29,22 @@ createRoot(document.getElementById("root")).render(
   <StrictMode>
     <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
       <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
+        <div
+          style={{
+            display: "flex",
+            paddingRight: "1rem",
+            justifyContent: "flex-end",
+          }}
+        >
+          <Unauthenticated>
+            <SignInButton mode="modal">
+              <button className="btn">Sign In</button>
+            </SignInButton>
+          </Unauthenticated>
+          <Authenticated>
+            <UserButton />
+          </Authenticated>
+        </div>
         <App />
       </ConvexProviderWithClerk>
     </ClerkProvider>

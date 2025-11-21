@@ -91,7 +91,7 @@ export default function Stats({ history, problemKeys, problemWords }) {
         <h3 style={{ marginTop: 0, textAlign: "left" }}>Recent History</h3>
         <div className="history-list">
           {history.slice(0, 10).map((session) => (
-            <div key={session.id} className="history-item">
+            <div key={session._id || session.id} className="history-item">
               <div
                 style={{
                   display: "flex",
@@ -107,7 +107,11 @@ export default function Stats({ history, problemKeys, problemWords }) {
                 <span
                   style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}
                 >
-                  {format(new Date(session.date), "MMM d, HH:mm")}
+                  {session.date
+                    ? format(new Date(session.date), "MMM d, HH:mm")
+                    : session._creationTime
+                      ? format(new Date(session._creationTime), "MMM d, HH:mm")
+                      : "Recent"}
                 </span>
               </div>
               <div
