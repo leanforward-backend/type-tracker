@@ -14,5 +14,5 @@ export default defineSchema({
     date: v.optional(v.string()),
     errors: v.record(v.string(), v.number()),
     missedWords: v.array(v.string()),
-  }),
+  }).index("by_user_id", ["userId"]),
 });

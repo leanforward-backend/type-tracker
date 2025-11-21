@@ -3,7 +3,6 @@ import { mutation, query } from "./_generated/server";
 
 export const saveRace = mutation({
   args: {
-    userId: v.optional(v.string()),
     wpm: v.number(),
     accuracy: v.number(),
     date: v.optional(v.string()),
@@ -11,16 +10,24 @@ export const saveRace = mutation({
     missedWords: v.array(v.string()),
   },
   handler: async (ctx, args) => {
-    await ctx.db.insert("races", args);
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Called saveRace without authentication present");
+    }
+    await ctx.db.insert("races", { ...args, userId: identity.subject });
   },
 });
 
 export const getHistory = query({
-  args: { userId: v.optional(v.string()) },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return [];
+    }
     return await ctx.db
       .query("races")
-      .filter((q) => q.eq(q.field("userId"), args.userId))
+      .withIndex("by_user_id", (q) => q.eq("userId", identity.subject))
       .order("desc")
       .take(50);
   },

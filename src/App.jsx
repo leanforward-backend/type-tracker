@@ -1,4 +1,11 @@
-import { useMutation, useQuery } from "convex/react";
+import { SignInButton, UserButton } from "@clerk/clerk-react";
+import {
+  Authenticated,
+  Unauthenticated,
+  useConvexAuth,
+  useMutation,
+  useQuery,
+} from "convex/react";
 import { useState } from "react";
 import { api } from "../convex/_generated/api";
 import "./App.css";
@@ -10,12 +17,20 @@ function App() {
   const [view, setView] = useState("game");
   const { history, saveSession, getProblemKeys, getProblemWords } =
     useTypeTracker();
+  const { isAuthenticated } = useConvexAuth();
 
   const handleSaveRace = useMutation(api.races.saveRace);
 
   const handleGameFinish = (stats) => {
     saveSession(stats);
-    handleSaveRace(stats);
+    if (isAuthenticated) {
+      console.log("Saving race to Convex...");
+      handleSaveRace(stats).catch((err) =>
+        console.error("Failed to save race:", err)
+      );
+    } else {
+      console.log("User not authenticated, skipping Convex save.");
+    }
   };
 
   const tasks = useQuery(api.tasks.get);
@@ -26,25 +41,33 @@ function App() {
       <header
         style={{
           marginBottom: "3rem",
-          display: "flex",
-          justifyContent: "space-between",
+          display: "grid",
+          gridTemplateColumns: "1fr auto 1fr",
           alignItems: "center",
+          padding: "1rem",
         }}
       >
-        <div className="title" style={{ fontSize: "1rem", margin: 0 }}>
-          {tasks === undefined ? (
-            <div>Loading tasks...</div>
-          ) : tasks.length === 0 ? (
-            <button onClick={() => createTask({ text: "Sample Task" })}>
-              Add Sample Task
-            </button>
-          ) : (
-            tasks.map(({ _id, text }) => <div key={_id}>{text}</div>)
-          )}
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          <h1 className="title" style={{ fontSize: "2.5rem", margin: 0 }}>
+            Type<span style={{ color: "var(--text-primary)" }}>Tracker</span>
+          </h1>
+          {/* Optional: Keep tasks debug info here or move it */}
+          <div
+            className="title"
+            style={{ fontSize: "1rem", margin: 0, marginLeft: "20px" }}
+          >
+            {tasks === undefined ? (
+              <div>Loading tasks...</div>
+            ) : tasks.length === 0 ? (
+              <button onClick={() => createTask({ text: "Sample Task" })}>
+                Add Sample Task
+              </button>
+            ) : (
+              tasks.map(({ _id, text }) => <div key={_id}>{text}</div>)
+            )}
+          </div>
         </div>
-        <h1 className="title" style={{ fontSize: "2.5rem", margin: 0 }}>
-          Type<span style={{ color: "var(--text-primary)" }}>Tracker</span>
-        </h1>
+
         <nav style={{ display: "flex", gap: "1rem" }}>
           <button
             className={`btn ${view === "game" ? "btn-primary" : ""}`}
@@ -59,6 +82,17 @@ function App() {
             Stats
           </button>
         </nav>
+
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <Unauthenticated>
+            <SignInButton mode="modal">
+              <button className="btn">Sign In</button>
+            </SignInButton>
+          </Unauthenticated>
+          <Authenticated>
+            <UserButton />
+          </Authenticated>
+        </div>
       </header>
 
       <main>
