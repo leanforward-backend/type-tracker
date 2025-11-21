@@ -116,7 +116,6 @@ export default function Game({ onFinish }) {
     const wordsTyped = finalInput.length / 5;
     const finalWpm = Math.round(wordsTyped / timeElapsed);
 
-    // Calculate accuracy
     let correctChars = 0;
     for (let i = 0; i < text.length; i++) {
       if (finalInput[i] === text[i]) correctChars++;

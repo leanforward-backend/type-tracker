@@ -1,36 +1,69 @@
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useState } from "react";
-import "./App.css"; // We can keep this or remove it if we moved everything to index.css. Let's keep it empty or minimal.
+import { api } from "../convex/_generated/api";
+import "./App.css";
 import Game from "./components/Game";
 import Stats from "./components/Stats";
 import { useTypeTracker } from "./hooks/useTypeTracker";
 
 function App() {
-  const [view, setView] = useState("game"); // 'game' | 'stats'
+  const [view, setView] = useState("game");
   const { history, saveSession, getProblemKeys, getProblemWords } =
     useTypeTracker();
+  const { isAuthenticated } = useConvexAuth();
+
+  const handleSaveRace = useMutation(api.races.saveRace);
 
   const handleGameFinish = (stats) => {
     saveSession(stats);
-    // Optional: automatically go to stats or show a summary modal.
-    // For now, let's stay on game but maybe show a "Saved" toast or just let the user navigate.
-    // Actually, a nice flow is to go to stats after a game to see how you did.
-    // But often in type racers you want to retry immediately.
-    // Let's just save it. The Game component handles the "Play Again" UI.
+    if (isAuthenticated) {
+      console.log("Saving race to Convex...");
+      handleSaveRace(stats).catch((err) =>
+        console.error("Failed to save race:", err)
+      );
+    } else {
+      console.log("User not authenticated, skipping Convex save.");
+    }
   };
+
+  const raceHistory = useQuery(api.races.getHistory);
+
+  const tasks = useQuery(api.tasks.get);
+  const createTask = useMutation(api.tasks.create);
+
+  const displayHistory = isAuthenticated && raceHistory ? raceHistory : history;
 
   return (
     <div className="app-container">
       <header
         style={{
           marginBottom: "3rem",
-          display: "flex",
-          justifyContent: "space-between",
+          display: "grid",
+          gridTemplateColumns: "1fr auto",
           alignItems: "center",
+          padding: "1rem",
         }}
       >
-        <h1 className="title" style={{ fontSize: "2.5rem", margin: 0 }}>
-          Type<span style={{ color: "var(--text-primary)" }}>Tracker</span>
-        </h1>
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          <h1 className="title" style={{ fontSize: "2.5rem", margin: 0 }}>
+            Type<span style={{ color: "var(--text-primary)" }}>Tracker</span>
+          </h1>
+          <div
+            className="title"
+            style={{ fontSize: "1rem", margin: 0, marginLeft: "20px" }}
+          >
+            {tasks === undefined ? (
+              <div>Loading tasks...</div>
+            ) : tasks.length === 0 ? (
+              <button onClick={() => createTask({ text: ":)" })}>
+                Click Me
+              </button>
+            ) : (
+              tasks.map(({ _id, text }) => <div key={_id}>{text}</div>)
+            )}
+          </div>
+        </div>
+
         <nav style={{ display: "flex", gap: "1rem" }}>
           <button
             className={`btn ${view === "game" ? "btn-primary" : ""}`}
@@ -52,7 +85,7 @@ function App() {
           <Game onFinish={handleGameFinish} />
         ) : (
           <Stats
-            history={history}
+            history={displayHistory}
             problemKeys={getProblemKeys()}
             problemWords={getProblemWords()}
           />
