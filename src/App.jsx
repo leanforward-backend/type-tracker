@@ -1,23 +1,21 @@
 import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 import { api } from "../convex/_generated/api";
-import "./App.css"; // We can keep this or remove it if we moved everything to index.css. Let's keep it empty or minimal.
+import "./App.css";
 import Game from "./components/Game";
 import Stats from "./components/Stats";
 import { useTypeTracker } from "./hooks/useTypeTracker";
 
 function App() {
-  const [view, setView] = useState("game"); // 'game' | 'stats'
+  const [view, setView] = useState("game");
   const { history, saveSession, getProblemKeys, getProblemWords } =
     useTypeTracker();
 
+  const handleSaveRace = useMutation(api.races.saveRace);
+
   const handleGameFinish = (stats) => {
     saveSession(stats);
-    // Optional: automatically go to stats or show a summary modal.
-    // For now, let's stay on game but maybe show a "Saved" toast or just let the user navigate.
-    // Actually, a nice flow is to go to stats after a game to see how you did.
-    // But often in type racers you want to retry immediately.
-    // Let's just save it. The Game component handles the "Play Again" UI.
+    handleSaveRace(stats);
   };
 
   const tasks = useQuery(api.tasks.get);

@@ -57,7 +57,7 @@ export function useTypeTracker() {
 
     return Object.entries(keyCounts)
       .sort(([, a], [, b]) => b - a)
-      .slice(0, 10); // Top 10 problem keys
+      .slice(0, 50); // Top 50 problem keys
   };
 
   const getProblemWords = () => {

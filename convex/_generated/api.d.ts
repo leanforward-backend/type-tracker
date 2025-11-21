@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as races from "../races.js";
 import type * as tasks from "../tasks.js";
 
 import type {
@@ -17,6 +18,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  races: typeof races;
   tasks: typeof tasks;
 }>;
 
