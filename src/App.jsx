@@ -1,4 +1,6 @@
+import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
+import { api } from "../convex/_generated/api";
 import "./App.css"; // We can keep this or remove it if we moved everything to index.css. Let's keep it empty or minimal.
 import Game from "./components/Game";
 import Stats from "./components/Stats";
@@ -18,6 +20,9 @@ function App() {
     // Let's just save it. The Game component handles the "Play Again" UI.
   };
 
+  const tasks = useQuery(api.tasks.get);
+  const createTask = useMutation(api.tasks.create);
+
   return (
     <div className="app-container">
       <header
@@ -28,6 +33,17 @@ function App() {
           alignItems: "center",
         }}
       >
+        <div className="title" style={{ fontSize: "1rem", margin: 0 }}>
+          {tasks === undefined ? (
+            <div>Loading tasks...</div>
+          ) : tasks.length === 0 ? (
+            <button onClick={() => createTask({ text: "Sample Task" })}>
+              Add Sample Task
+            </button>
+          ) : (
+            tasks.map(({ _id, text }) => <div key={_id}>{text}</div>)
+          )}
+        </div>
         <h1 className="title" style={{ fontSize: "2.5rem", margin: 0 }}>
           Type<span style={{ color: "var(--text-primary)" }}>Tracker</span>
         </h1>

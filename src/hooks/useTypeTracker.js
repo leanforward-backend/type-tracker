@@ -1,18 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 
 export function useTypeTracker() {
   const [history, setHistory] = useState([]);
 
   // Load history from the backend when the component mounts
   useEffect(() => {
-    fetch('/api/history')
-      .then(res => res.json())
-      .then(data => {
-        if (data.message === 'success') {
-          setHistory(data.data);
-        }
-      })
-      .catch(err => console.error('Failed to fetch history:', err));
+    // fetch('/api/history')
+    //   .then(res => res.json())
+    //   .then(data => {
+    //     if (data.message === 'success') {
+    //       setHistory(data.data);
+    //     }
+    //   })
+    //   .catch(err => console.error('Failed to fetch history:', err));
   }, []);
 
   const saveSession = (stats) => {
@@ -25,36 +25,36 @@ export function useTypeTracker() {
     };
 
     // Optimistically update UI
-    setHistory(prev => [newSession, ...prev]);
+    setHistory((prev) => [newSession, ...prev]);
 
     // Send to backend
-    fetch('/api/history', {
-      method: 'POST',
+    fetch("/api/history", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify(newSession),
     })
-    .then(res => res.json())
-    .then(data => {
-      if (data.message !== 'success') {
-        console.error('Failed to save session');
-        // Could revert state here if needed
-      }
-    })
-    .catch(err => console.error('Error saving session:', err));
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.message !== "success") {
+          console.error("Failed to save session");
+          // Could revert state here if needed
+        }
+      })
+      .catch((err) => console.error("Error saving session:", err));
   };
 
   const getProblemKeys = () => {
     const keyCounts = {};
-    history.forEach(session => {
+    history.forEach((session) => {
       if (session.errors) {
         Object.entries(session.errors).forEach(([key, count]) => {
           keyCounts[key] = (keyCounts[key] || 0) + count;
         });
       }
     });
-    
+
     return Object.entries(keyCounts)
       .sort(([, a], [, b]) => b - a)
       .slice(0, 10); // Top 10 problem keys
@@ -62,9 +62,9 @@ export function useTypeTracker() {
 
   const getProblemWords = () => {
     const wordCounts = {};
-    history.forEach(session => {
+    history.forEach((session) => {
       if (session.missedWords) {
-        session.missedWords.forEach(word => {
+        session.missedWords.forEach((word) => {
           wordCounts[word] = (wordCounts[word] || 0) + 1;
         });
       }
@@ -79,6 +79,6 @@ export function useTypeTracker() {
     history,
     saveSession,
     getProblemKeys,
-    getProblemWords
+    getProblemWords,
   };
 }
