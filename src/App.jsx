@@ -1,12 +1,13 @@
-import { useState } from 'react';
-import './App.css'; // We can keep this or remove it if we moved everything to index.css. Let's keep it empty or minimal.
-import Game from './components/Game';
-import Stats from './components/Stats';
-import { useTypeTracker } from './hooks/useTypeTracker';
+import { useState } from "react";
+import "./App.css"; // We can keep this or remove it if we moved everything to index.css. Let's keep it empty or minimal.
+import Game from "./components/Game";
+import Stats from "./components/Stats";
+import { useTypeTracker } from "./hooks/useTypeTracker";
 
 function App() {
-  const [view, setView] = useState('game'); // 'game' | 'stats'
-  const { history, saveSession, getProblemKeys, getProblemWords } = useTypeTracker();
+  const [view, setView] = useState("game"); // 'game' | 'stats'
+  const { history, saveSession, getProblemKeys, getProblemWords } =
+    useTypeTracker();
 
   const handleGameFinish = (stats) => {
     saveSession(stats);
@@ -19,18 +20,27 @@ function App() {
 
   return (
     <div className="app-container">
-      <header style={{ marginBottom: '3rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1 className="title" style={{ fontSize: '2.5rem', margin: 0 }}>Type<span style={{ color: 'var(--text-primary)' }}>Tracker</span></h1>
-        <nav style={{ display: 'flex', gap: '1rem' }}>
-          <button 
-            className={`btn ${view === 'game' ? 'btn-primary' : ''}`}
-            onClick={() => setView('game')}
+      <header
+        style={{
+          marginBottom: "3rem",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <h1 className="title" style={{ fontSize: "2.5rem", margin: 0 }}>
+          Type<span style={{ color: "var(--text-primary)" }}>Tracker</span>
+        </h1>
+        <nav style={{ display: "flex", gap: "1rem" }}>
+          <button
+            className={`btn ${view === "game" ? "btn-primary" : ""}`}
+            onClick={() => setView("game")}
           >
             Race
           </button>
-          <button 
-            className={`btn ${view === 'stats' ? 'btn-primary' : ''}`}
-            onClick={() => setView('stats')}
+          <button
+            className={`btn ${view === "stats" ? "btn-primary" : ""}`}
+            onClick={() => setView("stats")}
           >
             Stats
           </button>
@@ -38,13 +48,13 @@ function App() {
       </header>
 
       <main>
-        {view === 'game' ? (
+        {view === "game" ? (
           <Game onFinish={handleGameFinish} />
         ) : (
-          <Stats 
-            history={history} 
-            problemKeys={getProblemKeys()} 
-            problemWords={getProblemWords()} 
+          <Stats
+            history={history}
+            problemKeys={getProblemKeys()}
+            problemWords={getProblemWords()}
           />
         )}
       </main>

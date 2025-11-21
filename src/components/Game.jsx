@@ -11,6 +11,12 @@ export default function Game({ onFinish }) {
   const [isFinished, setIsFinished] = useState(false);
 
   const inputRef = useRef(null);
+  const typeSound = useRef(
+    new Audio("https://www.edclub.com/m/audio/typewriter.mp3")
+  );
+  const errorSound = useRef(
+    new Audio("https://www.edclub.com/m/audio/error.mp3")
+  );
 
   useEffect(() => {
     resetGame();
@@ -85,6 +91,11 @@ export default function Game({ onFinish }) {
           }
           charCount += word.length + 1; // +1 for space
         }
+        errorSound.current.currentTime = 0;
+        errorSound.current.play();
+      } else {
+        typeSound.current.currentTime = 0;
+        typeSound.current.play();
       }
 
       setInput((prev) => prev + typedChar);
