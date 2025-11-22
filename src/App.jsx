@@ -9,6 +9,7 @@ import { useTypeTracker } from "./hooks/useTypeTracker";
 
 function App() {
   const [view, setView] = useState("game");
+  const [mistakesMode, setMistakesMode] = useState(false);
   const { history, saveSession, getProblemKeys, getProblemWords } =
     useTypeTracker();
   const { isAuthenticated } = useConvexAuth();
@@ -56,7 +57,13 @@ function App() {
             {tasks === undefined ? (
               <div>Loading tasks...</div>
             ) : tasks.length === 0 ? (
-              <Toggle size="sm">Mistakes?</Toggle>
+              <Toggle
+                size="sm"
+                pressed={mistakesMode}
+                onPressedChange={setMistakesMode}
+              >
+                Mistakes?
+              </Toggle>
             ) : (
               tasks.map(({ _id, text }) => <div key={_id}>{text}</div>)
             )}
@@ -81,7 +88,7 @@ function App() {
 
       <main>
         {view === "game" ? (
-          <Game onFinish={handleGameFinish} />
+          <Game onFinish={handleGameFinish} mistakesMode={mistakesMode} />
         ) : (
           <Stats
             history={displayHistory}

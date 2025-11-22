@@ -142,6 +142,10 @@ body {
   text-decoration: underline;
 }
 
+.char.corrected {
+  color: orange;
+}
+
 .char.current {
   color: var(--accent-primary);
 }

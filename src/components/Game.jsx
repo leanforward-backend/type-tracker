@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { SENTENCES } from "./Sentences";
 
-export default function Game({ onFinish }) {
+export default function Game({ onFinish, mistakesMode }) {
   const [text, setText] = useState("");
   const [input, setInput] = useState("");
   const [startTime, setStartTime] = useState(null);
   const [wpm, setWpm] = useState(0);
   const [errors, setErrors] = useState({});
   const [missedWords, setMissedWords] = useState(new Set());
+  const [incorrectIndices, setIncorrectIndices] = useState(new Set());
   const [isFinished, setIsFinished] = useState(false);
 
   const inputRef = useRef(null);
@@ -39,6 +40,7 @@ export default function Game({ onFinish }) {
     setWpm(0);
     setErrors({});
     setMissedWords(new Set());
+    setIncorrectIndices(new Set());
     setIsFinished(false);
     if (inputRef.current) inputRef.current.focus();
   };
@@ -61,6 +63,13 @@ export default function Game({ onFinish }) {
       return;
     }
 
+    if (mistakesMode) {
+      const lastCharIndex = input.length - 1;
+      if (lastCharIndex >= 0 && input[lastCharIndex] !== text[lastCharIndex]) {
+        return;
+      }
+    }
+
     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
       if (!startTime) {
         setStartTime(Date.now());
@@ -73,6 +82,7 @@ export default function Game({ onFinish }) {
       const typedChar = e.key;
 
       if (typedChar !== expectedChar) {
+        setIncorrectIndices((prev) => new Set(prev).add(currentCharIndex));
         setErrors((prev) => ({
           ...prev,
           [expectedChar]: (prev[expectedChar] || 0) + 1,
@@ -120,7 +130,13 @@ export default function Game({ onFinish }) {
     for (let i = 0; i < text.length; i++) {
       if (finalInput[i] === text[i]) correctChars++;
     }
-    const accuracy = Math.round((correctChars / text.length) * 100);
+
+    const totalErrors = Object.values(errors).reduce((a, b) => a + b, 0);
+    const totalAttempts = correctChars + totalErrors;
+    const accuracy =
+      totalAttempts > 0
+        ? Math.round((correctChars / totalAttempts) * 100)
+        : 100;
 
     onFinish({
       wpm: finalWpm,
@@ -136,7 +152,11 @@ export default function Game({ onFinish }) {
       let className = "char";
       if (index < input.length) {
         if (input[index] === char) {
-          className += " correct";
+          if (mistakesMode && incorrectIndices.has(index)) {
+            className += " corrected";
+          } else {
+            className += " correct";
+          }
         } else {
           className += " incorrect";
         }
@@ -153,12 +173,18 @@ export default function Game({ onFinish }) {
   };
 
   const calculateAccuracy = () => {
-    if (input.length === 0) return 100;
+    const totalErrors = Object.values(errors).reduce((a, b) => a + b, 0);
+    if (input.length === 0 && totalErrors === 0) return 100;
+
     let correctChars = 0;
     for (let i = 0; i < input.length; i++) {
       if (input[i] === text[i]) correctChars++;
     }
-    return Math.round((correctChars / input.length) * 100);
+
+    const totalAttempts = correctChars + totalErrors;
+    return totalAttempts > 0
+      ? Math.round((correctChars / totalAttempts) * 100)
+      : 0;
   };
 
   return (
