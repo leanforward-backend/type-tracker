@@ -4,6 +4,7 @@ import { api } from "../convex/_generated/api";
 import "./App.css";
 import Game from "./components/Game";
 import Stats from "./components/Stats";
+import { Toggle } from "./components/ui/toggle";
 import { useTypeTracker } from "./hooks/useTypeTracker";
 
 function App() {
@@ -55,9 +56,7 @@ function App() {
             {tasks === undefined ? (
               <div>Loading tasks...</div>
             ) : tasks.length === 0 ? (
-              <button onClick={() => createTask({ text: ":)" })}>
-                Click Me
-              </button>
+              <Toggle size="sm">Mistakes?</Toggle>
             ) : (
               tasks.map(({ _id, text }) => <div key={_id}>{text}</div>)
             )}
