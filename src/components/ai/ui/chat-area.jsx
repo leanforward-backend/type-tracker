@@ -1,11 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SendHorizontal } from "lucide-react";
+import { AiChat } from "../ai-chat/ai-chat";
 
-export const ChatArea = () => {
+export const ChatArea = ({ SENTENCES }) => {
   return (
     <div className="border-2 border-gray-200 rounded-lg">
-      hello
+      <AiChat SENTENCES={SENTENCES} />
       <div
         style={{
           position: "relative",

@@ -1,9 +1,9 @@
 import { ChatArea } from "./ui/chat-area";
 
-export const AiChatbox = () => {
+export const AiChatbox = (SENTENCES) => {
   return (
     <div>
-      <ChatArea />
+      <ChatArea SENTENCES={SENTENCES} />
     </div>
   );
 };
