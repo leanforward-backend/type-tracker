@@ -110,11 +110,7 @@ export default function Game({ onFinish, mistakesMode }) {
 
       setInput((prev) => prev + typedChar);
 
-      // Check completion
       if (input.length + 1 === text.length && typedChar === expectedChar) {
-        // Validate if the whole string matches (it should if we only allow correct typing, but here we allow errors)
-        // Actually, if we allow errors, we should probably only finish if the text is CORRECT.
-        // But for simplicity, let's finish when length matches, and calculate accuracy.
         finishGame(input + typedChar);
       }
     }

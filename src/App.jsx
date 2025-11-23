@@ -2,6 +2,7 @@ import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 import { api } from "../convex/_generated/api";
 import "./App.css";
+import { AiChatbox } from "./components/ai/ai-chatbox";
 import Game from "./components/Game";
 import Stats from "./components/Stats";
 import { Toggle } from "./components/ui/toggle";
@@ -88,7 +89,10 @@ function App() {
 
       <main>
         {view === "game" ? (
-          <Game onFinish={handleGameFinish} mistakesMode={mistakesMode} />
+          <div>
+            <Game onFinish={handleGameFinish} mistakesMode={mistakesMode} />
+            <AiChatbox />
+          </div>
         ) : (
           <Stats
             history={displayHistory}
