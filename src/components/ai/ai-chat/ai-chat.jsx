@@ -1,5 +1,4 @@
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { GoogleGenAI } from "@google/genai";
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
@@ -8,7 +7,7 @@ import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
 
-export const AiChat = ({ SENTENCES }) => {
+export const AiChat = ({ SENTENCES, setFirstResponse }) => {
   const [textWithCitations, setTextWithCitations] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -116,6 +115,7 @@ export const AiChat = ({ SENTENCES }) => {
       setIsStreaming(false);
     } finally {
       setIsLoading(false);
+      setFirstResponse(true);
     }
   };
 
@@ -124,42 +124,64 @@ export const AiChat = ({ SENTENCES }) => {
   }, [SENTENCES]);
 
   return (
-    <ScrollArea className={"h-172"}>
-      <h1>AI Response:</h1>
-      <div className="p-8 text-left" style={{ whiteSpace: "pre-wrap" }}>
-        {isLoading && isStreaming ? (
-          <div>{textWithCitations}</div>
-        ) : isLoading ? (
-          "Loading..."
-        ) : (
-          <ReactMarkdown
-            components={{
-              code({ node, inline, className, children, ...props }) {
-                const match = /language-(\w+)/.exec(className || "");
-                return !inline && match ? (
-                  <SyntaxHighlighter
-                    style={vscDarkPlus}
-                    language={match[1]}
-                    PreTag="div"
-                    {...props}
-                  >
-                    {String(children).replace(/\n$/, "")}
-                  </SyntaxHighlighter>
-                ) : (
-                  <code className={className} {...props}>
-                    {children}
-                  </code>
-                );
-              },
-            }}
-          >
-            {textWithCitations}
-          </ReactMarkdown>
-        )}
-        <Button onClick={generateContent} disabled={isLoading}>
-          {isLoading ? "Generating..." : "Generate"}
-        </Button>
+    <div className={`${textWithCitations ? "w-full" : "w-fit"}`}>
+      <div
+        className={`${textWithCitations ? "max-h-[43rem] overflow-auto" : "h-fit"}`}
+      >
+        <div className="p-8">
+          <h1 className="mb-4">AI Response:</h1>
+          <div className="text-left" style={{ whiteSpace: "pre-wrap" }}>
+            {isLoading && isStreaming ? (
+              <div>{textWithCitations}</div>
+            ) : isLoading ? (
+              "Loading..."
+            ) : (
+              <ReactMarkdown
+                components={{
+                  code({ node, inline, className, children, ...props }) {
+                    const match = /language-(\w+)/.exec(className || "");
+                    return !inline && match ? (
+                      <SyntaxHighlighter
+                        style={vscDarkPlus}
+                        language={match[1]}
+                        PreTag="div"
+                        {...props}
+                      >
+                        {String(children).replace(/\n$/, "")}
+                      </SyntaxHighlighter>
+                    ) : (
+                      <code className={className} {...props}>
+                        {children}
+                      </code>
+                    );
+                  },
+                  a({ node, children, href, ...props }) {
+                    return (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        {...props}
+                      >
+                        {children}
+                      </a>
+                    );
+                  },
+                }}
+              >
+                {textWithCitations}
+              </ReactMarkdown>
+            )}
+            <Button
+              onClick={generateContent}
+              disabled={isLoading}
+              className="mt-4"
+            >
+              {isLoading ? "Generating..." : "Generate"}
+            </Button>
+          </div>
+        </div>
       </div>
-    </ScrollArea>
+    </div>
   );
 };
