@@ -3,6 +3,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { GoogleGenAI } from "@google/genai";
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
 
@@ -73,7 +75,7 @@ export const AiChat = ({ SENTENCES }) => {
 
       const result = await ai.models.generateContentStream({
         model: "gemini-2.5-flash-lite",
-        contents: `You are a senior developer describing the following concept to a junior dev. Provide technical details and links to docs. Give your information about the subject in a paragrpah above as well as techincal details / showcase code if relevent, and your links to docs or other resources below: "${SENTENCES}"`,
+        contents: `You are a senior developer describing the following concept to a junior dev. Don't give any greeting, Provide technical details and links to docs. Give your information about the subject in a paragrpah above as well as techincal details / showcase code if relevent, and your links to docs or other resources below: "${SENTENCES}"`,
         config,
       });
 
@@ -124,13 +126,35 @@ export const AiChat = ({ SENTENCES }) => {
   return (
     <ScrollArea className={"h-172"}>
       <h1>AI Response:</h1>
-      <div style={{ whiteSpace: "pre-wrap" }}>
+      <div className="p-8 text-left" style={{ whiteSpace: "pre-wrap" }}>
         {isLoading && isStreaming ? (
           <div>{textWithCitations}</div>
         ) : isLoading ? (
           "Loading..."
         ) : (
-          <ReactMarkdown>{textWithCitations}</ReactMarkdown>
+          <ReactMarkdown
+            components={{
+              code({ node, inline, className, children, ...props }) {
+                const match = /language-(\w+)/.exec(className || "");
+                return !inline && match ? (
+                  <SyntaxHighlighter
+                    style={vscDarkPlus}
+                    language={match[1]}
+                    PreTag="div"
+                    {...props}
+                  >
+                    {String(children).replace(/\n$/, "")}
+                  </SyntaxHighlighter>
+                ) : (
+                  <code className={className} {...props}>
+                    {children}
+                  </code>
+                );
+              },
+            }}
+          >
+            {textWithCitations}
+          </ReactMarkdown>
         )}
         <Button onClick={generateContent} disabled={isLoading}>
           {isLoading ? "Generating..." : "Generate"}
