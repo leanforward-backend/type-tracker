@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { SENTENCES } from "./Sentences";
 
-export default function Game({ onFinish, mistakesMode }) {
+export default function Game({
+  onFinish,
+  mistakesMode,
+  SENTENCES,
+  isReset,
+  onReset,
+}) {
   const [text, setText] = useState("");
   const [input, setInput] = useState("");
   const [startTime, setStartTime] = useState(null);
@@ -10,6 +15,7 @@ export default function Game({ onFinish, mistakesMode }) {
   const [missedWords, setMissedWords] = useState(new Set());
   const [incorrectIndices, setIncorrectIndices] = useState(new Set());
   const [isFinished, setIsFinished] = useState(false);
+  const [isResetLocal, setIsResetLocal] = useState(false);
 
   const inputRef = useRef(null);
   const typeSound = useRef(
@@ -21,7 +27,7 @@ export default function Game({ onFinish, mistakesMode }) {
 
   useEffect(() => {
     resetGame();
-  }, []);
+  }, [SENTENCES]);
 
   useEffect(() => {
     if (startTime && !isFinished) {
@@ -33,8 +39,13 @@ export default function Game({ onFinish, mistakesMode }) {
   }, [startTime, isFinished, input]);
 
   const resetGame = () => {
-    const randomIndex = Math.floor(Math.random() * SENTENCES.length);
-    setText(SENTENCES[randomIndex]);
+    // Ensure text is always a string to prevent "text.split is not a function" error
+    const gameText = typeof SENTENCES === "string" ? SENTENCES : "";
+    if (typeof SENTENCES !== "string" && SENTENCES) {
+      console.warn("Game received non-string SENTENCES prop:", SENTENCES);
+    }
+
+    setText(gameText);
     setInput("");
     setStartTime(null);
     setWpm(0);
@@ -110,11 +121,7 @@ export default function Game({ onFinish, mistakesMode }) {
 
       setInput((prev) => prev + typedChar);
 
-      // Check completion
       if (input.length + 1 === text.length && typedChar === expectedChar) {
-        // Validate if the whole string matches (it should if we only allow correct typing, but here we allow errors)
-        // Actually, if we allow errors, we should probably only finish if the text is CORRECT.
-        // But for simplicity, let's finish when length matches, and calculate accuracy.
         finishGame(input + typedChar);
       }
     }
@@ -237,7 +244,7 @@ export default function Game({ onFinish, mistakesMode }) {
       {isFinished && (
         <button
           className="btn btn-primary"
-          onClick={resetGame}
+          onClick={onReset}
           style={{ marginTop: "1rem" }}
         >
           Play Again

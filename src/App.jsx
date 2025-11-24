@@ -1,13 +1,16 @@
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../convex/_generated/api";
 import "./App.css";
+import { AiChatbox } from "./components/ai/ai-chatbox";
 import Game from "./components/Game";
+import { SENTENCES } from "./components/Sentences";
 import Stats from "./components/Stats";
 import { Toggle } from "./components/ui/toggle";
 import { useTypeTracker } from "./hooks/useTypeTracker";
 
 function App() {
+  const [sentance, setSentance] = useState("");
   const [view, setView] = useState("game");
   const [mistakesMode, setMistakesMode] = useState(false);
   const { history, saveSession, getProblemKeys, getProblemWords } =
@@ -35,8 +38,20 @@ function App() {
 
   const displayHistory = isAuthenticated && raceHistory ? raceHistory : history;
 
+  const generateNewSentence = () => {
+    const randomIndex = Math.floor(Math.random() * SENTENCES.length);
+    setSentance(SENTENCES[randomIndex]);
+  };
+
+  useEffect(() => {
+    generateNewSentence();
+  }, []);
+
+  // console.log(sentance);
+
   return (
     <div className="app-container">
+      {/* <Test /> */}
       <header
         style={{
           marginBottom: "3rem",
@@ -88,7 +103,15 @@ function App() {
 
       <main>
         {view === "game" ? (
-          <Game onFinish={handleGameFinish} mistakesMode={mistakesMode} />
+          <div>
+            <Game
+              onFinish={handleGameFinish}
+              mistakesMode={mistakesMode}
+              SENTENCES={sentance}
+              onReset={generateNewSentence}
+            />
+            <AiChatbox SENTENCES={sentance} />
+          </div>
         ) : (
           <Stats
             history={displayHistory}
