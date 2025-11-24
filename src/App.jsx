@@ -47,10 +47,11 @@ function App() {
     generateNewSentence();
   }, []);
 
-  console.log(sentance);
+  // console.log(sentance);
 
   return (
     <div className="app-container">
+      {/* <Test /> */}
       <header
         style={{
           marginBottom: "3rem",
