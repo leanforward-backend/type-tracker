@@ -7,6 +7,10 @@ export default defineSchema({
     isCompleted: v.boolean(),
     userId: v.optional(v.string()),
   }),
+  mistakes: defineTable({
+    userId: v.optional(v.string()),
+    mistakes: v.boolean(),
+  }).index("by_user_id", ["userId"]),
   races: defineTable({
     userId: v.string(),
     wpm: v.number(),

@@ -6,6 +6,7 @@ export default function Game({
   SENTENCES,
   isReset,
   onReset,
+  forwardedRef,
 }) {
   const [text, setText] = useState("");
   const [input, setInput] = useState("");
@@ -17,7 +18,7 @@ export default function Game({
   const [isFinished, setIsFinished] = useState(false);
   const [isResetLocal, setIsResetLocal] = useState(false);
 
-  const inputRef = useRef(null);
+  const inputRef = forwardedRef || useRef(null);
   const typeSound = useRef(
     new Audio("https://www.edclub.com/m/audio/typewriter.mp3")
   );
@@ -33,7 +34,7 @@ export default function Game({
     if (startTime && !isFinished) {
       const interval = setInterval(() => {
         calculateStats();
-      }, 500);
+      }, 200);
       return () => clearInterval(interval);
     }
   }, [startTime, isFinished, input]);

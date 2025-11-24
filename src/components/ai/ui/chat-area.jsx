@@ -11,8 +11,6 @@ export const ChatArea = ({ SENTENCES }) => {
     setFirstResponse(true);
   };
 
-  console.log(firstResponse);
-
   return (
     <div className="border-2 border-gray-200 rounded-lg overflow-hidden max-h-[50rem] pb-4">
       <AiChat SENTENCES={SENTENCES} setFirstResponse={handleFirstResponse} />

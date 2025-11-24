@@ -1,5 +1,5 @@
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../convex/_generated/api";
 import "./App.css";
 import { AiChatbox } from "./components/ai/ai-chatbox";
@@ -17,7 +17,24 @@ function App() {
     useTypeTracker();
   const { isAuthenticated } = useConvexAuth();
 
+  const inputRef = useRef(null);
+
   const handleSaveRace = useMutation(api.races.saveRace);
+
+  const setMistakes = useMutation(api.mistakes.createMistakes);
+
+  const getMistakes = useQuery(api.mistakes.getMistakes);
+
+  const handleSetMistakes = (pressed) => {
+    if (isAuthenticated) {
+      console.log("Saving mistakes mode to Convex...");
+      setMistakes({ mistakes: pressed }).catch((err) =>
+        console.error("Failed to save mistakes mode:", err)
+      );
+    } else {
+      console.log("User not authenticated, skipping Convex save.");
+    }
+  };
 
   const handleGameFinish = (stats) => {
     saveSession(stats);
@@ -29,6 +46,10 @@ function App() {
     } else {
       console.log("User not authenticated, skipping Convex save.");
     }
+  };
+
+  const handleFocusClick = () => {
+    inputRef.current?.focus();
   };
 
   const raceHistory = useQuery(api.races.getHistory);
@@ -47,11 +68,8 @@ function App() {
     generateNewSentence();
   }, []);
 
-  // console.log(sentance);
-
   return (
     <div className="app-container">
-      {/* <Test /> */}
       <header
         style={{
           marginBottom: "3rem",
@@ -70,12 +88,16 @@ function App() {
             style={{ fontSize: "1rem", margin: 0, marginLeft: "20px" }}
           >
             {tasks === undefined ? (
-              <div>Loading tasks...</div>
+              <div>Loading Choice...</div>
             ) : tasks.length === 0 ? (
               <Toggle
                 size="sm"
-                pressed={mistakesMode}
-                onPressedChange={setMistakesMode}
+                pressed={getMistakes?.mistakes ?? mistakesMode}
+                onPressedChange={(pressed) => {
+                  setMistakesMode(pressed);
+                  handleSetMistakes(pressed);
+                  handleFocusClick();
+                }}
               >
                 Mistakes?
               </Toggle>
@@ -109,6 +131,7 @@ function App() {
               mistakesMode={mistakesMode}
               SENTENCES={sentance}
               onReset={generateNewSentence}
+              forwardedRef={inputRef}
             />
             <AiChatbox SENTENCES={sentance} />
           </div>
