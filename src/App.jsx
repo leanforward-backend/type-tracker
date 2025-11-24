@@ -1,5 +1,5 @@
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../convex/_generated/api";
 import "./App.css";
 import { AiChatbox } from "./components/ai/ai-chatbox";
@@ -17,7 +17,24 @@ function App() {
     useTypeTracker();
   const { isAuthenticated } = useConvexAuth();
 
+  const inputRef = useRef(null);
+
   const handleSaveRace = useMutation(api.races.saveRace);
+
+  const setMistakes = useMutation(api.mistakes.createMistakes);
+
+  const getMistakes = useQuery(api.mistakes.getMistakes);
+
+  const handleSetMistakes = (pressed) => {
+    if (isAuthenticated) {
+      console.log("Saving mistakes mode to Convex...");
+      setMistakes({ mistakes: pressed }).catch((err) =>
+        console.error("Failed to save mistakes mode:", err)
+      );
+    } else {
+      console.log("User not authenticated, skipping Convex save.");
+    }
+  };
 
   const handleGameFinish = (stats) => {
     saveSession(stats);
@@ -31,10 +48,13 @@ function App() {
     }
   };
 
+  const handleFocusClick = () => {
+    inputRef.current?.focus();
+  };
+
   const raceHistory = useQuery(api.races.getHistory);
 
   const tasks = useQuery(api.tasks.get);
-  const createTask = useMutation(api.tasks.create);
 
   const displayHistory = isAuthenticated && raceHistory ? raceHistory : history;
 
@@ -47,11 +67,8 @@ function App() {
     generateNewSentence();
   }, []);
 
-  // console.log(sentance);
-
   return (
     <div className="app-container">
-      {/* <Test /> */}
       <header
         style={{
           marginBottom: "3rem",
@@ -69,18 +86,25 @@ function App() {
             className="title"
             style={{ fontSize: "1rem", margin: 0, marginLeft: "20px" }}
           >
-            {tasks === undefined ? (
-              <div>Loading tasks...</div>
-            ) : tasks.length === 0 ? (
-              <Toggle
-                size="sm"
-                pressed={mistakesMode}
-                onPressedChange={setMistakesMode}
-              >
-                Mistakes?
-              </Toggle>
+            {getMistakes === undefined ? (
+              <Toggle size="sm">Loading Option</Toggle>
             ) : (
-              tasks.map(({ _id, text }) => <div key={_id}>{text}</div>)
+              <Toggle
+                size="lg"
+                className={"border border-blue-500 toggle-no-bg cursor-pointer"}
+                pressed={
+                  getMistakes?.mistakes !== undefined
+                    ? getMistakes.mistakes
+                    : mistakesMode
+                }
+                onPressedChange={(pressed) => {
+                  setMistakesMode(pressed);
+                  handleSetMistakes(pressed);
+                  handleFocusClick();
+                }}
+              >
+                {mistakesMode ? "No mistakes" : "Mistakes"}
+              </Toggle>
             )}
           </div>
         </div>
@@ -109,6 +133,7 @@ function App() {
               mistakesMode={mistakesMode}
               SENTENCES={sentance}
               onReset={generateNewSentence}
+              forwardedRef={inputRef}
             />
             <AiChatbox SENTENCES={sentance} />
           </div>

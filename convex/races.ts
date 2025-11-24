@@ -29,6 +29,6 @@ export const getHistory = query({
       .query("races")
       .withIndex("by_user_id", (q) => q.eq("userId", identity.subject))
       .order("desc")
-      .take(50);
+      .collect();
   },
 });

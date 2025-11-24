@@ -1,4 +1,6 @@
+import { useMutation } from "convex/react";
 import { useEffect, useRef, useState } from "react";
+import { api } from "../../convex/_generated/api";
 
 export default function Game({
   onFinish,
@@ -6,6 +8,7 @@ export default function Game({
   SENTENCES,
   isReset,
   onReset,
+  forwardedRef,
 }) {
   const [text, setText] = useState("");
   const [input, setInput] = useState("");
@@ -15,15 +18,24 @@ export default function Game({
   const [missedWords, setMissedWords] = useState(new Set());
   const [incorrectIndices, setIncorrectIndices] = useState(new Set());
   const [isFinished, setIsFinished] = useState(false);
-  const [isResetLocal, setIsResetLocal] = useState(false);
+  const [saved, setSaved] = useState(false);
 
-  const inputRef = useRef(null);
+  const inputRef = forwardedRef || useRef(null);
   const typeSound = useRef(
     new Audio("https://www.edclub.com/m/audio/typewriter.mp3")
   );
   const errorSound = useRef(
     new Audio("https://www.edclub.com/m/audio/error.mp3")
   );
+
+  const saveQuote = useMutation(api.storedQuotes.saveQuote);
+
+  const handleSaveQuote = () => {
+    saveQuote({
+      quote: SENTENCES,
+    });
+    setSaved(true);
+  };
 
   useEffect(() => {
     resetGame();
@@ -33,7 +45,7 @@ export default function Game({
     if (startTime && !isFinished) {
       const interval = setInterval(() => {
         calculateStats();
-      }, 500);
+      }, 200);
       return () => clearInterval(interval);
     }
   }, [startTime, isFinished, input]);
@@ -242,13 +254,19 @@ export default function Game({
       </div>
 
       {isFinished && (
-        <button
-          className="btn btn-primary"
-          onClick={onReset}
-          style={{ marginTop: "1rem" }}
-        >
-          Play Again
-        </button>
+        <div className=" items-center justify-center flex gap-2 mt-2">
+          <button className="btn btn-primary" onClick={onReset}>
+            Play Again
+          </button>
+          <button
+            className={"btn stats"}
+            onClick={() => {
+              handleSaveQuote();
+            }}
+          >
+            {saved ? "Saved!" : "Save Quote"}
+          </button>
+        </div>
       )}
     </div>
   );
