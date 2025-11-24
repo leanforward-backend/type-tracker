@@ -7,8 +7,8 @@ const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
 
 export const AiChat = ({ SENTENCES }) => {
   const [textWithCitations, setTextWithCitations] = useState("");
-
   const [isLoading, setIsLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
 
   function addCitations(response) {
     if (!response) return "";
@@ -58,6 +58,7 @@ export const AiChat = ({ SENTENCES }) => {
 
   const generateContent = async () => {
     setIsLoading(true);
+    setIsStreaming(true);
     setTextWithCitations("");
     try {
       const groundingTool = {
@@ -85,6 +86,8 @@ export const AiChat = ({ SENTENCES }) => {
         finalResponse = chunk;
       }
 
+      setIsStreaming(false);
+
       if (finalResponse && accumulatedText) {
         console.log("Final Response:", finalResponse);
         console.log("Accumulated Text:", accumulatedText);
@@ -107,6 +110,7 @@ export const AiChat = ({ SENTENCES }) => {
         console.error("Error generating content:", error);
         setTextWithCitations("Error generating content.");
       }
+      setIsStreaming(false);
     } finally {
       setIsLoading(false);
     }
@@ -120,7 +124,9 @@ export const AiChat = ({ SENTENCES }) => {
     <div>
       <h1>AI Response:</h1>
       <div style={{ whiteSpace: "pre-wrap" }}>
-        {isLoading ? (
+        {isLoading && isStreaming ? (
+          <div>{textWithCitations}</div>
+        ) : isLoading ? (
           "Loading..."
         ) : (
           <ReactMarkdown>{textWithCitations}</ReactMarkdown>
