@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { GoogleGenAI } from "@google/genai";
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
@@ -121,7 +122,7 @@ export const AiChat = ({ SENTENCES }) => {
   }, [SENTENCES]);
 
   return (
-    <div>
+    <ScrollArea className={"h-172"}>
       <h1>AI Response:</h1>
       <div style={{ whiteSpace: "pre-wrap" }}>
         {isLoading && isStreaming ? (
@@ -135,6 +136,6 @@ export const AiChat = ({ SENTENCES }) => {
           {isLoading ? "Generating..." : "Generate"}
         </Button>
       </div>
-    </div>
+    </ScrollArea>
   );
 };
