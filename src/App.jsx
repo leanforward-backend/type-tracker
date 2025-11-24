@@ -90,7 +90,8 @@ function App() {
               <Toggle size="sm">Loading Option</Toggle>
             ) : (
               <Toggle
-                size="sm"
+                size="lg"
+                className={"border border-blue-500 toggle-no-bg cursor-pointer"}
                 pressed={
                   getMistakes?.mistakes !== undefined
                     ? getMistakes.mistakes

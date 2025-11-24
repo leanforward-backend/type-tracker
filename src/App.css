@@ -46,6 +46,20 @@
   color: #888;
 }
 
+.toggle-no-bg[data-state="on"] {
+  background-color: transparent !important;
+  color: inherit !important;
+}
+
+.toggle-no-bg[data-state="on"]:hover {
+  background-color: transparent !important;
+  color: inherit !important;
+}
+
+.toggle-no-bg:hover {
+  background-color: transparent !important;
+}
+
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
