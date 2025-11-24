@@ -19,4 +19,8 @@ export default defineSchema({
     errors: v.record(v.string(), v.number()),
     missedWords: v.array(v.string()),
   }).index("by_user_id", ["userId"]),
+  storedQuotes: defineTable({
+    userId: v.optional(v.string()),
+    quote: v.string(),
+  }).index("by_user_id", ["userId"]),
 });

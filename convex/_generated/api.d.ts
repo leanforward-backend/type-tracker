@@ -10,6 +10,7 @@
 
 import type * as mistakes from "../mistakes.js";
 import type * as races from "../races.js";
+import type * as storedQuotes from "../storedQuotes.js";
 import type * as tasks from "../tasks.js";
 
 import type {
@@ -21,6 +22,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   mistakes: typeof mistakes;
   races: typeof races;
+  storedQuotes: typeof storedQuotes;
   tasks: typeof tasks;
 }>;
 

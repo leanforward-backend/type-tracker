@@ -55,7 +55,6 @@ function App() {
   const raceHistory = useQuery(api.races.getHistory);
 
   const tasks = useQuery(api.tasks.get);
-  const createTask = useMutation(api.tasks.create);
 
   const displayHistory = isAuthenticated && raceHistory ? raceHistory : history;
 
@@ -87,22 +86,24 @@ function App() {
             className="title"
             style={{ fontSize: "1rem", margin: 0, marginLeft: "20px" }}
           >
-            {tasks === undefined ? (
-              <div>Loading Choice...</div>
-            ) : tasks.length === 0 ? (
+            {getMistakes === undefined ? (
+              <Toggle size="sm">Loading Option</Toggle>
+            ) : (
               <Toggle
                 size="sm"
-                pressed={getMistakes?.mistakes ?? mistakesMode}
+                pressed={
+                  getMistakes?.mistakes !== undefined
+                    ? getMistakes.mistakes
+                    : mistakesMode
+                }
                 onPressedChange={(pressed) => {
                   setMistakesMode(pressed);
                   handleSetMistakes(pressed);
                   handleFocusClick();
                 }}
               >
-                Mistakes?
+                {mistakesMode ? "No mistakes" : "Mistakes"}
               </Toggle>
-            ) : (
-              tasks.map(({ _id, text }) => <div key={_id}>{text}</div>)
             )}
           </div>
         </div>
