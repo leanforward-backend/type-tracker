@@ -167,6 +167,25 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+.chat-messages-container::-webkit-scrollbar {
+  width: 12px;
+}
+
+.chat-messages-container::-webkit-scrollbar-track {
+  background: var(--bg-card);
+  border-radius: 10px;
+}
+
+.chat-messages-container::-webkit-scrollbar-thumb {
+  background: var(--accent-primary);
+  border-radius: 10px;
+  border: 2px solid var(--bg-card);
+}
+
+.chat-messages-container::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-secondary);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
