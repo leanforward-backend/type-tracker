@@ -22,6 +22,16 @@ export default function Game({
   const [saved, setSaved] = useState(false);
 
   const inputRef = forwardedRef || useRef(null);
+  const playAgainRef = useRef(null);
+
+  useEffect(() => {
+    if (isFinished) {
+      setTimeout(() => {
+        playAgainRef.current?.focus();
+      }, 0);
+    }
+  }, [isFinished]);
+
   const typeSound = useRef(
     new Audio("https://www.edclub.com/m/audio/typewriter.mp3")
   );
@@ -271,6 +281,7 @@ export default function Game({
       {isFinished && (
         <div className=" items-center justify-center flex gap-2 mt-2">
           <button
+            ref={playAgainRef}
             className="btn btn-primary"
             onClick={async () => {
               await removeQuote();

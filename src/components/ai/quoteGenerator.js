@@ -31,15 +31,32 @@ export async function generateQuote() {
 
     const chat = ai.chats.create({
       model: "gemini-2.5-flash-lite",
-      config: {
-        systemInstruction: `Generate a single, educational programming/tech quote or concept explanation. 
-        It should be:
-        - 50-400 characters long
-        - Educational and informative
-        - About programming, software engineering, web development, algorithms, or tech concepts
-        - Suitable for typing practice
-        Return ONLY the quote, no extra text, no quotes around it, no numbering.`,
-      },
+      systemInstruction: `Generate a single educational programming quote or code concept explanation for typing practice.
+
+      CONTENT REQUIREMENTS:
+      - Focus on practical, actionable programming knowledge (API usage, syntax patterns, best practices, common pitfalls)
+      - Include technical terms, method names, or code concepts that reinforce muscle memory
+      - Vary between: language features, framework patterns, algorithm explanations, debugging tips, performance concepts, etc.
+      - Use concrete examples when possible (e.g., "Array.prototype.map returns a new array" vs "map transforms arrays")
+
+      STYLE GUIDELINES:
+      - Write in a clear, documentation-like tone
+      - Use proper technical capitalization (e.g., JavaScript not javascript, CSS not css)
+      - Include specific function/method names with proper syntax: addEventListener(), useState(), Promise.all()
+      - 50-400 characters, make certain to not go outside this threshold, (aim for 100-250 for optimal typing practice)
+
+      AVOID:
+      - Questions or prompts
+      - Explanations that require code blocks to understand
+      - Saying here's a good quote or anything before the quote
+
+      
+      EXAMPLES OF GOOD QUOTES:
+      - "The spread operator (...) creates a shallow copy of arrays and objects, useful for immutability in React state updates"
+      - "setTimeout() doesn't pause execution; it schedules a callback to run after the specified delay in milliseconds"
+      - "CSS specificity follows this hierarchy: inline styles, IDs, classes/attributes, elements. Use !important sparingly"
+
+      Return ONLY the quote text, no quotation marks, prefixes, or numbering.`,
     });
 
     const result = await chat.sendMessage({

@@ -37,7 +37,6 @@ function App() {
 
   const handleSetMistakes = (pressed) => {
     if (isAuthenticated) {
-      console.log("Saving mistakes mode to Convex...");
       setMistakes({ mistakes: pressed }).catch((err) =>
         console.error("Failed to save mistakes mode:", err)
       );
@@ -62,6 +61,8 @@ function App() {
   const handleFocusClick = () => {
     inputRef.current?.focus();
   };
+
+  const currentMistakesMode = getMistakes?.mistakes ?? mistakesMode;
 
   const raceHistory = useQuery(api.races.getHistory);
 
@@ -133,6 +134,7 @@ function App() {
     if (quoteCount === 0 && !hasSeededQuotes.current) {
       seedInitialQuotes();
     }
+    getMistakes?.mistakes && setMistakesMode(getMistakes.mistakes);
   }, [quoteCount]);
 
   useEffect(() => {
@@ -172,11 +174,7 @@ function App() {
               <Toggle
                 size="lg"
                 className={"border border-blue-500 toggle-no-bg cursor-pointer"}
-                pressed={
-                  getMistakes?.mistakes !== undefined
-                    ? getMistakes.mistakes
-                    : mistakesMode
-                }
+                pressed={currentMistakesMode}
                 onPressedChange={(pressed) => {
                   setMistakesMode(pressed);
                   handleSetMistakes(pressed);

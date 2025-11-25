@@ -1,6 +1,5 @@
 export const SENTENCES = [
   // General / Concepts
-  "Clean code always looks like it was written by someone who cares.",
   "Premature optimization is the root of all evil in programming.",
   "Recursion is a method where the solution depends on solutions to smaller instances of the same problem.",
   "A closure is the combination of a function bundled together with references to its surrounding state.",
