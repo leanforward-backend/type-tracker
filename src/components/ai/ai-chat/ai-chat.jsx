@@ -14,16 +14,33 @@ export const AiChat = ({ SENTENCES }) => {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [isNearBottom, setIsNearBottom] = useState(true);
   const chatSessionRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const scrollContainerRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, isStreaming]);
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      setIsNearBottom(
+        scrollHeight - scrollTop - clientHeight < clientHeight * 0.1
+      );
+    };
+
+    container.addEventListener("scroll", handleScroll);
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  useEffect(() => {
+    if (isNearBottom) scrollToBottom();
+  }, [messages, isStreaming, isNearBottom]);
 
   function addCitations(response) {
     if (!response) return "";
@@ -215,6 +232,7 @@ export const AiChat = ({ SENTENCES }) => {
   return (
     <div className={`${messages.length > 0 ? "w-full" : "w-fit"}`}>
       <div
+        ref={scrollContainerRef}
         className={`chat-messages-container ${messages.length > 0 ? "max-h-[43rem] overflow-auto" : "h-fit"}`}
       >
         <div className="p-8">
