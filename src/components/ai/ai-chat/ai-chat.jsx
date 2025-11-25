@@ -278,6 +278,7 @@ export const AiChat = ({ SENTENCES }) => {
                               href={href}
                               target="_blank"
                               rel="noopener noreferrer"
+                              className="underline"
                               {...props}
                             >
                               {children}
