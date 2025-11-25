@@ -305,7 +305,7 @@ export const AiChat = ({ SENTENCES }) => {
           <Input
             placeholder="Ask me anything..."
             style={{
-              paddingRight: "40px",
+              paddingRight: "50px",
               height: "50px",
               borderRadius: "15px",
             }}
