@@ -9,6 +9,7 @@ export default function Game({
   isReset,
   onReset,
   forwardedRef,
+  currentQuoteId,
 }) {
   const [text, setText] = useState("");
   const [input, setInput] = useState("");
@@ -29,6 +30,8 @@ export default function Game({
   );
 
   const saveQuote = useMutation(api.storedQuotes.saveQuote);
+
+  const deleteQuote = useMutation(api.raceQuotes.deleteQuote);
 
   const handleSaveQuote = () => {
     saveQuote({
@@ -66,6 +69,18 @@ export default function Game({
     setIncorrectIndices(new Set());
     setIsFinished(false);
     if (inputRef.current) inputRef.current.focus();
+  };
+
+  const removeQuote = async () => {
+    // Delete the quote that was just completed
+    if (currentQuoteId) {
+      try {
+        await deleteQuote({ quoteId: currentQuoteId });
+        console.log("Deleted completed quote");
+      } catch (error) {
+        console.error("Failed to delete quote:", error);
+      }
+    }
   };
 
   const calculateStats = () => {
@@ -255,7 +270,13 @@ export default function Game({
 
       {isFinished && (
         <div className=" items-center justify-center flex gap-2 mt-2">
-          <button className="btn btn-primary" onClick={onReset}>
+          <button
+            className="btn btn-primary"
+            onClick={async () => {
+              await removeQuote();
+              onReset();
+            }}
+          >
             Play Again
           </button>
           <button

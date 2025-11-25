@@ -2,11 +2,6 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
-  tasks: defineTable({
-    text: v.string(),
-    isCompleted: v.boolean(),
-    userId: v.optional(v.string()),
-  }),
   mistakes: defineTable({
     userId: v.optional(v.string()),
     mistakes: v.boolean(),
@@ -23,4 +18,7 @@ export default defineSchema({
     userId: v.optional(v.string()),
     quote: v.string(),
   }).index("by_user_id", ["userId"]),
+  raceQuotes: defineTable({
+    quote: v.string(),
+  }),
 });
