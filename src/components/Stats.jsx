@@ -165,6 +165,7 @@ export default function Stats({ history, problemKeys, problemWords }) {
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-2">
                   <Button
+                    className={"cursor-pointer"}
                     variant="destructive"
                     size="sm"
                     onClick={() => deleteRace({ id: session._id })}
