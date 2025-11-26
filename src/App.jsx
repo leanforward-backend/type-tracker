@@ -138,16 +138,16 @@ function App() {
   }, [quoteCount]);
 
   useEffect(() => {
-    if (!sentance) {
-      if (availableQuotes && availableQuotes.length > 0) {
-        console.log("Initial load: setting first quote");
-        generateNewSentence();
-      } else if (quoteCount === 0) {
-        console.log("No quotes in DB, using hardcoded fallback");
-        generateNewSentence();
-      }
+    if (availableQuotes && availableQuotes.length > 0 && !sentance) {
+      console.log("Initial load: setting first quote");
+      generateNewSentence();
+    } else if (!sentance && quoteCount === 0) {
+      console.log("No quotes in DB, using hardcoded fallback");
+      const randomIndex = Math.floor(Math.random() * SENTENCES.length);
+      setSentance(SENTENCES[randomIndex]);
+      setCurrentQuoteId(null);
     }
-  }, [availableQuotes, quoteCount, sentance]);
+  }, [availableQuotes, quoteCount]);
 
   return (
     <div className="app-container">

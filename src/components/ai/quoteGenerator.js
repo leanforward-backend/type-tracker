@@ -31,6 +31,9 @@ export async function generateQuote(retryCount = 0) {
 
     const chat = ai.chats.create({
       model: "gemini-2.5-flash-lite",
+      config: {
+        temperature: 1.5,
+      },
     });
 
     const result = await chat.sendMessage({
@@ -47,14 +50,17 @@ export async function generateQuote(retryCount = 0) {
       - Use proper technical capitalization (e.g., JavaScript not javascript, CSS not css)
       - Include specific function/method names with proper syntax: addEventListener(), useState(), Promise.all()
       - 50-400 characters, make certain to not go outside this threshold, (aim for 100-250 for optimal typing practice)
+      - Do not use backticks (\u0060) for emphasis around technical terms.
+      - Do not use backticks (\`) for emphasis or to highlight technical terms. Write technical terms in plain text without any special formatting.
+
 
       AVOID:
       - Questions or prompts
       - Explanations that require code blocks to understand
       - Saying here's a good quote or anything before the quote
-      - Do not give any explination or preable, only the quote.
+      - Do not give any explanation or preamble, only the quote.
       - Making text bold by using **
-
+      - Adding quotation marks or backticks around a name you are defining, e.g. "const" or "let", or "fetch()" returns a "Promise", with backticks instead of "" is not allowed.
       
       EXAMPLES OF GOOD QUOTES:
       - "The spread operator (...) creates a shallow copy of arrays and objects, useful for immutability in React state updates"
@@ -153,11 +159,11 @@ export async function generateQuotesBatch(count = 20) {
     }
   }
 
-  const { SENTENCES } = await import("../Sentences");
+  // const { SENTENCES } = await import("../Sentences");
 
-  if (retryCount > 3) {
-    quotes.push(SENTENCES[Math.floor(Math.random() * SENTENCES.length)]);
-  }
+  // if (retryCount > 3) {
+  //   quotes.push(SENTENCES[Math.floor(Math.random() * SENTENCES.length)]);
+  // }
 
   return quotes.slice(0, count);
 }
