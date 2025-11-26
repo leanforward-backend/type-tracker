@@ -113,7 +113,10 @@ export default function Stats({ history, problemKeys, problemWords }) {
                 </li>
               ))
             ) : (
-              <p style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>
+              <p
+                className="text-center mt-3"
+                style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}
+              >
                 No missed words!
               </p>
             )}
