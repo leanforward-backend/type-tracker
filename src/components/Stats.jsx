@@ -1,4 +1,17 @@
+import { useMutation, useQuery } from "convex/react";
 import { format } from "date-fns";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useState } from "react";
+import { api } from "../../convex/_generated/api";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "./ui/accordion";
+import { Button } from "./ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Table, TableBody, TableCell, TableRow } from "./ui/table";
 
 export default function Stats({ history, problemKeys, problemWords }) {
   if (history.length === 0) {
@@ -20,6 +33,27 @@ export default function Stats({ history, problemKeys, problemWords }) {
 
   const averageAccuracy = Math.round(
     history.reduce((acc, curr) => acc + curr.accuracy, 0) / history.length
+  );
+
+  const storedQuotes = useQuery(api.storedQuotes.getStoredQuotes);
+  const deleteRace = useMutation(api.races.deleteRace);
+
+  const [historyPage, setHistoryPage] = useState(1);
+  const [quotesPage, setQuotesPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
+
+  const totalHistoryPages = Math.ceil(history.length / ITEMS_PER_PAGE);
+  const paginatedHistory = history.slice(
+    (historyPage - 1) * ITEMS_PER_PAGE,
+    historyPage * ITEMS_PER_PAGE
+  );
+
+  const totalQuotesPages = Math.ceil(
+    (storedQuotes?.length || 0) / ITEMS_PER_PAGE
+  );
+  const paginatedQuotes = storedQuotes?.slice(
+    (quotesPage - 1) * ITEMS_PER_PAGE,
+    quotesPage * ITEMS_PER_PAGE
   );
 
   return (
@@ -79,7 +113,10 @@ export default function Stats({ history, problemKeys, problemWords }) {
                 </li>
               ))
             ) : (
-              <p style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>
+              <p
+                className="text-center mt-3"
+                style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}
+              >
                 No missed words!
               </p>
             )}
@@ -89,49 +126,167 @@ export default function Stats({ history, problemKeys, problemWords }) {
 
       <div className="card" style={{ marginTop: "2rem" }}>
         <h3 style={{ marginTop: 0, textAlign: "left" }}>Recent History</h3>
-        <div className="history-list">
-          {history.slice(0, 10).map((session) => (
-            <div key={session._id || session.id} className="history-item">
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "flex-start",
-                }}
-              >
-                <span
-                  style={{ fontWeight: "bold", color: "var(--text-primary)" }}
-                >
-                  {session.wpm} WPM
-                </span>
-                <span
-                  style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}
-                >
-                  {session.date
-                    ? format(new Date(session.date), "MMM d, HH:mm")
-                    : session._creationTime
-                      ? format(new Date(session._creationTime), "MMM d, HH:mm")
-                      : "Recent"}
-                </span>
-              </div>
-              <div
-                style={{ display: "flex", alignItems: "center", gap: "1rem" }}
-              >
-                <span
-                  style={{
-                    color:
-                      session.accuracy >= 90
-                        ? "var(--color-success)"
-                        : "var(--color-warning)",
-                  }}
-                >
-                  {session.accuracy}% Acc
-                </span>
-              </div>
+        <Table className="text-base">
+          <TableBody>
+            {paginatedHistory.map((session) => (
+              <Popover key={session._id || session.id}>
+                <PopoverTrigger asChild>
+                  <TableRow className="border-b-[var(--bg-input)] cursor-pointer hover:bg-muted/5 transition-colors">
+                    <TableCell className="py-4">
+                      <div className="flex flex-col items-start">
+                        <span className="font-bold text-[var(--text-primary)]">
+                          {session.wpm} WPM
+                        </span>
+                        <span className="text-sm text-[var(--text-muted)]">
+                          {session.date
+                            ? format(new Date(session.date), "MMM d, HH:mm")
+                            : session._creationTime
+                              ? format(
+                                  new Date(session._creationTime),
+                                  "MMM d, HH:mm"
+                                )
+                              : "Recent"}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right py-4">
+                      <span
+                        style={{
+                          color:
+                            session.accuracy >= 90
+                              ? "var(--color-success)"
+                              : "var(--color-warning)",
+                        }}
+                      >
+                        {session.accuracy}% Acc
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-2">
+                  <Button
+                    className={"cursor-pointer"}
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => deleteRace({ id: session._id })}
+                  >
+                    Delete Run
+                  </Button>
+                </PopoverContent>
+              </Popover>
+            ))}
+          </TableBody>
+        </Table>
+
+        {totalHistoryPages > 1 && (
+          <div className="flex items-center justify-end space-x-2 py-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
+              disabled={historyPage === 1}
+              className="bg-[var(--bg-input)] text-[var(--text-primary)] border-transparent hover:border-[var(--accent-primary)] hover:bg-[var(--bg-input)] hover:text-[var(--text-primary)] disabled:opacity-50"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Previous
+            </Button>
+            <div className="text-sm text-[var(--text-secondary)]">
+              Page {historyPage} of {totalHistoryPages}
             </div>
-          ))}
-        </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setHistoryPage((p) => Math.min(totalHistoryPages, p + 1))
+              }
+              disabled={historyPage === totalHistoryPages}
+              className="bg-[var(--bg-input)] text-[var(--text-primary)] border-transparent hover:border-[var(--accent-primary)] hover:bg-[var(--bg-input)] hover:text-[var(--text-primary)] disabled:opacity-50"
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
       </div>
+
+      <Accordion type="single" collapsible className="card mt-8 w-full">
+        <AccordionItem value="stored-quotes">
+          <AccordionTrigger className={"text-lg"}>
+            Stored Quotes
+          </AccordionTrigger>
+          <AccordionContent className="flex flex-col gap-4 text-balance">
+            <div className="history-list">
+              {paginatedQuotes?.map((quote) => (
+                <div
+                  key={quote._id || quote._creationTime}
+                  className="history-item"
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "flex-start",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontWeight: "",
+                        color: "var(--text-primary)",
+                      }}
+                    >
+                      {quote.quote}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: "0.8rem",
+                        color: "var(--text-muted)",
+                      }}
+                    >
+                      {quote.date
+                        ? format(new Date(quote.date), "MMM d, HH:mm")
+                        : quote._creationTime
+                          ? format(
+                              new Date(quote._creationTime),
+                              "MMM d, HH:mm"
+                            )
+                          : "Recent"}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {totalQuotesPages > 1 && (
+              <div className="flex items-center justify-end space-x-2 py-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setQuotesPage((p) => Math.max(1, p - 1))}
+                  disabled={quotesPage === 1}
+                  className="bg-[var(--bg-input)] text-[var(--text-primary)] border-transparent hover:border-[var(--accent-primary)] hover:bg-[var(--bg-input)] hover:text-[var(--text-primary)] disabled:opacity-50"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Previous
+                </Button>
+                <div className="text-sm text-[var(--text-secondary)]">
+                  Page {quotesPage} of {totalQuotesPages}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setQuotesPage((p) => Math.min(totalQuotesPages, p + 1))
+                  }
+                  disabled={quotesPage === totalQuotesPages}
+                  className="bg-[var(--bg-input)] text-[var(--text-primary)] border-transparent hover:border-[var(--accent-primary)] hover:bg-[var(--bg-input)] hover:text-[var(--text-primary)] disabled:opacity-50"
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
     </div>
   );
 }

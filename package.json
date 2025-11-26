@@ -12,6 +12,8 @@
   "dependencies": {
     "@clerk/clerk-react": "^5.56.1",
     "@google/genai": "^1.30.0",
+    "@radix-ui/react-accordion": "^1.2.12",
+    "@radix-ui/react-popover": "^1.1.15",
     "@radix-ui/react-scroll-area": "^1.2.10",
     "@radix-ui/react-slot": "^1.2.4",
     "@radix-ui/react-toggle": "^1.1.10",

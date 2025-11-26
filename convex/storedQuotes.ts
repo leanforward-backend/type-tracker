@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 
 export const saveQuote = mutation({
   args: {
@@ -15,5 +15,21 @@ export const saveQuote = mutation({
       userId: identity.subject,
     });
     return true;
+  },
+});
+
+export const getStoredQuotes = query({
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Called storedQuotes without authentication present");
+    }
+
+    const storedQuotes = await ctx.db
+      .query("storedQuotes")
+      .withIndex("by_user_id", (q) => q.eq("userId", identity.subject))
+      .order("desc")
+      .collect();
+    return storedQuotes;
   },
 });

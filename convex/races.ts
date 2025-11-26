@@ -19,7 +19,6 @@ export const saveRace = mutation({
 });
 
 export const getHistory = query({
-  args: {},
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
@@ -30,5 +29,23 @@ export const getHistory = query({
       .withIndex("by_user_id", (q) => q.eq("userId", identity.subject))
       .order("desc")
       .collect();
+  },
+});
+
+export const deleteRace = mutation({
+  args: { id: v.id("races") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Called deleteRace without authentication present");
+    }
+    const race = await ctx.db.get(args.id);
+    if (!race) {
+      throw new Error("Race not found");
+    }
+    if (race.userId !== identity.subject) {
+      throw new Error("Unauthorized to delete this race");
+    }
+    await ctx.db.delete(args.id);
   },
 });
