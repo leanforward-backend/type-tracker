@@ -1,4 +1,4 @@
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { format } from "date-fns";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
@@ -10,14 +10,8 @@ import {
   AccordionTrigger,
 } from "./ui/accordion";
 import { Button } from "./ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "./ui/table";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Table, TableBody, TableCell, TableRow } from "./ui/table";
 
 export default function Stats({ history, problemKeys, problemWords }) {
   if (history.length === 0) {
@@ -42,6 +36,7 @@ export default function Stats({ history, problemKeys, problemWords }) {
   );
 
   const storedQuotes = useQuery(api.storedQuotes.getStoredQuotes);
+  const deleteRace = useMutation(api.races.deleteRace);
 
   const [historyPage, setHistoryPage] = useState(1);
   const [quotesPage, setQuotesPage] = useState(1);
@@ -129,48 +124,52 @@ export default function Stats({ history, problemKeys, problemWords }) {
       <div className="card" style={{ marginTop: "2rem" }}>
         <h3 style={{ marginTop: 0, textAlign: "left" }}>Recent History</h3>
         <Table className="text-base">
-          <TableHeader>
-            <TableRow className="border-b-[var(--bg-input)] hover:bg-transparent">
-              <TableHead className="text-left text-[var(--text-secondary)]">
-                WPM
-              </TableHead>
-              <TableHead className="text-left text-[var(--text-secondary)]">
-                Accuracy
-              </TableHead>
-              <TableHead className="text-right text-[var(--text-secondary)]">
-                Date
-              </TableHead>
-            </TableRow>
-          </TableHeader>
           <TableBody>
             {paginatedHistory.map((session) => (
-              <TableRow
-                key={session._id || session.id}
-                className="border-b-[var(--bg-input)] hover:bg-transparent"
-              >
-                <TableCell className="font-bold text-[var(--text-primary)] py-4">
-                  {session.wpm} WPM
-                </TableCell>
-                <TableCell className="py-4">
-                  <span
-                    style={{
-                      color:
-                        session.accuracy >= 90
-                          ? "var(--color-success)"
-                          : "var(--color-warning)",
-                    }}
+              <Popover key={session._id || session.id}>
+                <PopoverTrigger asChild>
+                  <TableRow className="border-b-[var(--bg-input)] cursor-pointer hover:bg-muted/5 transition-colors">
+                    <TableCell className="py-4">
+                      <div className="flex flex-col items-start">
+                        <span className="font-bold text-[var(--text-primary)]">
+                          {session.wpm} WPM
+                        </span>
+                        <span className="text-sm text-[var(--text-muted)]">
+                          {session.date
+                            ? format(new Date(session.date), "MMM d, HH:mm")
+                            : session._creationTime
+                              ? format(
+                                  new Date(session._creationTime),
+                                  "MMM d, HH:mm"
+                                )
+                              : "Recent"}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right py-4">
+                      <span
+                        style={{
+                          color:
+                            session.accuracy >= 90
+                              ? "var(--color-success)"
+                              : "var(--color-warning)",
+                        }}
+                      >
+                        {session.accuracy}% Acc
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-2">
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => deleteRace({ id: session._id })}
                   >
-                    {session.accuracy}% Acc
-                  </span>
-                </TableCell>
-                <TableCell className="text-right text-[var(--text-muted)] py-4">
-                  {session.date
-                    ? format(new Date(session.date), "MMM d, HH:mm")
-                    : session._creationTime
-                      ? format(new Date(session._creationTime), "MMM d, HH:mm")
-                      : "Recent"}
-                </TableCell>
-              </TableRow>
+                    Delete Run
+                  </Button>
+                </PopoverContent>
+              </Popover>
             ))}
           </TableBody>
         </Table>
@@ -207,81 +206,80 @@ export default function Stats({ history, problemKeys, problemWords }) {
       </div>
 
       <Accordion type="single" collapsible className="card mt-8 w-full">
-        <AccordionItem value="product-info">
-          <AccordionTrigger>Product Information</AccordionTrigger>
+        <AccordionItem value="stored-quotes">
+          <AccordionTrigger className={"text-lg"}>
+            Stored Quotes
+          </AccordionTrigger>
           <AccordionContent className="flex flex-col gap-4 text-balance">
-            <div className="mt-6">
-              <h3 style={{ marginTop: 0, textAlign: "left" }}>Stored Quotes</h3>
-              <div className="history-list">
-                {paginatedQuotes?.map((quote) => (
+            <div className="history-list">
+              {paginatedQuotes?.map((quote) => (
+                <div
+                  key={quote._id || quote._creationTime}
+                  className="history-item"
+                >
                   <div
-                    key={quote._id || quote._creationTime}
-                    className="history-item"
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "flex-start",
+                    }}
                   >
-                    <div
+                    <span
                       style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "flex-start",
+                        fontWeight: "",
+                        color: "var(--text-primary)",
                       }}
                     >
-                      <span
-                        style={{
-                          fontWeight: "",
-                          color: "var(--text-primary)",
-                        }}
-                      >
-                        {quote.quote}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: "0.8rem",
-                          color: "var(--text-muted)",
-                        }}
-                      >
-                        {quote.date
-                          ? format(new Date(quote.date), "MMM d, HH:mm")
-                          : quote._creationTime
-                            ? format(
-                                new Date(quote._creationTime),
-                                "MMM d, HH:mm"
-                              )
-                            : "Recent"}
-                      </span>
-                    </div>
+                      {quote.quote}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: "0.8rem",
+                        color: "var(--text-muted)",
+                      }}
+                    >
+                      {quote.date
+                        ? format(new Date(quote.date), "MMM d, HH:mm")
+                        : quote._creationTime
+                          ? format(
+                              new Date(quote._creationTime),
+                              "MMM d, HH:mm"
+                            )
+                          : "Recent"}
+                    </span>
                   </div>
-                ))}
-              </div>
-              {totalQuotesPages > 1 && (
-                <div className="flex items-center justify-end space-x-2 py-4">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setQuotesPage((p) => Math.max(1, p - 1))}
-                    disabled={quotesPage === 1}
-                    className="bg-[var(--bg-input)] text-[var(--text-primary)] border-transparent hover:border-[var(--accent-primary)] hover:bg-[var(--bg-input)] hover:text-[var(--text-primary)] disabled:opacity-50"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                    Previous
-                  </Button>
-                  <div className="text-sm text-[var(--text-secondary)]">
-                    Page {quotesPage} of {totalQuotesPages}
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      setQuotesPage((p) => Math.min(totalQuotesPages, p + 1))
-                    }
-                    disabled={quotesPage === totalQuotesPages}
-                    className="bg-[var(--bg-input)] text-[var(--text-primary)] border-transparent hover:border-[var(--accent-primary)] hover:bg-[var(--bg-input)] hover:text-[var(--text-primary)] disabled:opacity-50"
-                  >
-                    Next
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
                 </div>
-              )}
+              ))}
             </div>
+            {totalQuotesPages > 1 && (
+              <div className="flex items-center justify-end space-x-2 py-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setQuotesPage((p) => Math.max(1, p - 1))}
+                  disabled={quotesPage === 1}
+                  className="bg-[var(--bg-input)] text-[var(--text-primary)] border-transparent hover:border-[var(--accent-primary)] hover:bg-[var(--bg-input)] hover:text-[var(--text-primary)] disabled:opacity-50"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Previous
+                </Button>
+                <div className="text-sm text-[var(--text-secondary)]">
+                  Page {quotesPage} of {totalQuotesPages}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setQuotesPage((p) => Math.min(totalQuotesPages, p + 1))
+                  }
+                  disabled={quotesPage === totalQuotesPages}
+                  className="bg-[var(--bg-input)] text-[var(--text-primary)] border-transparent hover:border-[var(--accent-primary)] hover:bg-[var(--bg-input)] hover:text-[var(--text-primary)] disabled:opacity-50"
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
           </AccordionContent>
         </AccordionItem>
       </Accordion>
