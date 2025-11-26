@@ -19,7 +19,6 @@ export const saveRace = mutation({
 });
 
 export const getHistory = query({
-  args: {},
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
