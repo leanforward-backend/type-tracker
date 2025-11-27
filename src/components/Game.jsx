@@ -284,6 +284,7 @@ export default function Game({
             ref={playAgainRef}
             className="btn btn-primary"
             onClick={async () => {
+              setSaved(false);
               await removeQuote();
               onReset();
             }}
