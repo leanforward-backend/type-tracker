@@ -239,7 +239,7 @@ export const AiChat = ({ SENTENCES }) => {
   }
 
   return (
-    <div className="w-full border-2 border-gray-200 rounded-lg overflow-hidden max-h-[50rem] pb-4">
+    <div className="w-full border-1 border-gray-700 rounded-lg overflow-hidden max-h-[50rem] pb-4">
       <div
         ref={scrollContainerRef}
         className="chat-messages-container max-h-[43rem] overflow-auto"
