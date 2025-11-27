@@ -107,6 +107,7 @@ export default function Game({
     if (isFinished) return;
 
     if (e.key === "Backspace") {
+      e.preventDefault();
       setInput((prev) => prev.slice(0, -1));
       return;
     }
@@ -119,6 +120,7 @@ export default function Game({
     }
 
     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
       if (!startTime) {
         setStartTime(Date.now());
       }
