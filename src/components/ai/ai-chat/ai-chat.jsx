@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
+import ParticleBackground from "./ParticleBackground";
 
 const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
 
@@ -36,7 +37,7 @@ export const AiChat = ({ SENTENCES }) => {
 
     container.addEventListener("scroll", handleScroll);
     return () => container.removeEventListener("scroll", handleScroll);
-  }, []);
+  }, [messages.length > 0]);
 
   useEffect(() => {
     if (isNearBottom) scrollToBottom();
@@ -229,19 +230,21 @@ export const AiChat = ({ SENTENCES }) => {
     chatSessionRef.current = null;
   }, [SENTENCES]);
 
+  if (messages.length === 0) {
+    return (
+      <div className="w-full">
+        <ParticleBackground onClick={startChat} isLoading={isLoading} />
+      </div>
+    );
+  }
+
   return (
-    <div className={`${messages.length > 0 ? "w-full" : "w-fit"}`}>
+    <div className="w-full border-2 border-gray-200 rounded-lg overflow-hidden max-h-[50rem] pb-4">
       <div
         ref={scrollContainerRef}
-        className={`chat-messages-container ${messages.length > 0 ? "max-h-[43rem] overflow-auto" : "h-fit"}`}
+        className="chat-messages-container max-h-[43rem] overflow-auto"
       >
         <div className="p-8">
-          {messages.length === 0 && (
-            <Button onClick={startChat} disabled={isLoading} className="mt-4">
-              {isLoading ? "Generating..." : "Generate"}
-            </Button>
-          )}
-
           {messages.map((msg, index) => (
             <div
               key={index}
@@ -300,43 +303,41 @@ export const AiChat = ({ SENTENCES }) => {
         </div>
       </div>
 
-      {messages.length > 0 && (
-        <div className="relative w-[60%] mx-auto mt-8">
-          <Input
-            placeholder="Ask me anything..."
-            style={{
-              paddingRight: "50px",
-              height: "50px",
-              borderRadius: "15px",
-            }}
-            size="xl"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSendMessage();
-              }
-            }}
-          />
-          <Button
-            size="icon"
-            className="circle-icon-button cursor-pointer"
-            onClick={handleSendMessage}
-            disabled={isLoading || !input.trim()}
-            style={{
-              position: "absolute",
-              right: "10px",
-              top: "50%",
-              transform: "translateY(-50%)",
-              height: "32px",
-              width: "32px",
-            }}
-          >
-            <SendHorizontal className="h-4 w-4" />
-          </Button>
-        </div>
-      )}
+      <div className="relative w-[60%] mx-auto mt-8">
+        <Input
+          placeholder="Ask me anything..."
+          style={{
+            paddingRight: "50px",
+            height: "50px",
+            borderRadius: "15px",
+          }}
+          size="xl"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              handleSendMessage();
+            }
+          }}
+        />
+        <Button
+          size="icon"
+          className="circle-icon-button cursor-pointer"
+          onClick={handleSendMessage}
+          disabled={isLoading || !input.trim()}
+          style={{
+            position: "absolute",
+            right: "10px",
+            top: "50%",
+            transform: "translateY(-50%)",
+            height: "32px",
+            width: "32px",
+          }}
+        >
+          <SendHorizontal className="h-4 w-4" />
+        </Button>
+      </div>
     </div>
   );
 };
