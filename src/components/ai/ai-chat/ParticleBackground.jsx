@@ -3,6 +3,11 @@ import { useEffect, useRef } from "react";
 const ParticleBackground = ({ onClick, isLoading }) => {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
+  const loadingRef = useRef(isLoading);
+
+  useEffect(() => {
+    loadingRef.current = isLoading;
+  }, [isLoading]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -10,6 +15,7 @@ const ParticleBackground = ({ onClick, isLoading }) => {
     let animationFrameId;
     let particles = [];
     let mouse = { x: null, y: null };
+    let gravityEnabled = true;
 
     const resizeCanvas = () => {
       if (containerRef.current) {
@@ -26,7 +32,6 @@ const ParticleBackground = ({ onClick, isLoading }) => {
         this.size = Math.random() * 2 + 1;
         this.speedX = Math.random() * 0.2 - 0.1;
         this.speedY = Math.random() * 0.2 - 0.1;
-        // Use the accent colors from CSS
         const colors = ["#00f2ff", "#0077ffff", "#48daffff"];
         this.color = colors[Math.floor(Math.random() * colors.length)];
         this.baseX = this.x;
@@ -35,17 +40,20 @@ const ParticleBackground = ({ onClick, isLoading }) => {
       }
 
       update() {
-        // Speed multiplier on hover
         const speedMultiplier = mouse.x != null ? 1.8 : 1;
+
+        if (loadingRef.current) {
+          this.speedY += 0.05;
+        } else if (Math.abs(this.speedY) > 0.2) {
+          this.speedY *= 0.95;
+        }
 
         this.x += this.speedX * speedMultiplier;
         this.y += this.speedY * speedMultiplier;
 
-        // Boundary check
         if (this.x > canvas.width || this.x < 0) this.speedX = -this.speedX;
         if (this.y > canvas.height || this.y < 0) this.speedY = -this.speedY;
 
-        // Mouse interaction
         if (mouse.x != null) {
           let dx = mouse.x - this.x;
           let dy = mouse.y - this.y;
@@ -68,7 +76,7 @@ const ParticleBackground = ({ onClick, isLoading }) => {
         ctx.globalAlpha = 0.6;
         ctx.fillStyle = this.color;
         ctx.beginPath();
-        // Size multiplier on hover
+
         const sizeMultiplier = mouse.x != null ? 1.2 : 1;
         ctx.arc(this.x, this.y, this.size * sizeMultiplier, 0, Math.PI * 2);
         ctx.closePath();
