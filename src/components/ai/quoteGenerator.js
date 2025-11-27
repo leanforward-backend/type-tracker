@@ -30,7 +30,7 @@ export async function generateQuote(retryCount = 0) {
     await waitForRateLimit();
 
     const chat = ai.chats.create({
-      model: "gemini-2.5-flash-lite",
+      model: "gemini-2.5-flash",
       config: {
         temperature: 1.5,
       },
@@ -40,15 +40,17 @@ export async function generateQuote(retryCount = 0) {
       message: `Generate a single educational programming quote or code concept explanation for typing practice.
 
       CONTENT REQUIREMENTS:
-      - Focus on practical, actionable programming knowledge (API usage, syntax patterns, best practices, common pitfalls)
+      - Focus on practical, actionable programming knowledge across different domains
       - Include technical terms, method names, or code concepts that reinforce muscle memory
-      - Vary between: language features, framework patterns, algorithm explanations, debugging tips, performance concepts, etc.
-      - Use concrete examples when possible (e.g., "Array.prototype.map returns a new array" vs "map transforms arrays")
+      - **CRITICAL: Maximize topic diversity. Avoid common defaults like memory leaks, garbage collection, async/await, promises, or error handling**
+      - **Select from this broad range**: regular expressions, bit manipulation, recursion patterns, graph traversal, caching strategies, authentication flows, API design, encoding standards, file I/O, parsing techniques, sorting algorithms, tree structures, linked lists, stack/queue operations, HTTP methods, DNS resolution, TCP/UDP differences, encryption methods, hashing algorithms, design patterns, refactoring techniques, code profiling, dependency injection, lazy loading, serialization, compression, race conditions, immutability, closures, hoisting, scope rules, module systems, package management, CI/CD pipelines, containerization, load balancing, rate limiting, session management, CORS policies, webhooks, polling vs websockets, SQL joins, database transactions, normalization, indexing strategies, query optimization, ORM behavior, migrations, schema design, NoSQL patterns, key-value stores, document databases, time complexity, space complexity, amortized analysis, dynamic programming, greedy algorithms, divide and conquer, backtracking, memoization, tail recursion
+      - Use concrete examples when possible
+      - **Do not repeat topics from the examples below** - they are only format demonstrations
 
       STYLE GUIDELINES:
       - Write in a clear, documentation-like tone
-      - Use proper technical capitalization (e.g., JavaScript not javascript, CSS not css)
-      - Include specific function/method names with proper syntax: addEventListener(), useState(), Promise.all()
+      - Use proper technical capitalization
+      - Include specific function/method names with proper syntax
       - 50-400 characters, make certain to not go outside this threshold, (aim for 100-250 for optimal typing practice)
       - Do not use backticks (\u0060) for emphasis around technical terms.
       - Do not use backticks (\`) for emphasis or to highlight technical terms. Write technical terms in plain text without any special formatting.
@@ -61,11 +63,21 @@ export async function generateQuote(retryCount = 0) {
       - Do not give any explanation or preamble, only the quote.
       - Making text bold by using **
       - Adding quotation marks or backticks around a name you are defining, e.g. "const" or "let", or "fetch()" returns a "Promise", with backticks instead of "" is not allowed.
+      - **Repeating concepts from examples (hash tables, deadlocks, database indexes)**
+
       
-      EXAMPLES OF GOOD QUOTES:
+      EXAMPLES (format only - use different topics):
       - "The spread operator (...) creates a shallow copy of arrays and objects, useful for immutability in React state updates"
       - "setTimeout() doesn't pause execution; it schedules a callback to run after the specified delay in milliseconds"
-      - "CSS specificity follows this hierarchy: inline styles, IDs, classes/attributes, elements. Use !important sparingly"
+      - "Hash tables provide O(1) average lookup time but degrade to O(n) with poor hash functions or high collision rates"
+      - "Deadlocks occur when two processes each hold a resource the other needs, creating circular wait conditions"
+      - "Database indexes speed up SELECT queries but slow down INSERT, UPDATE, and DELETE operations due to index maintenance"
+
+      EXAMPLES (showing structure and style):
+      - "[Technical concept] [specific behavior] [practical implication with numbers/specifics]"
+      - "[System behavior] occurs when [condition], resulting in [consequence with technical detail]"
+      - "[Tool/method] improves [metric] but introduces [tradeoff] due to [technical reason]"
+
 
       EXAMPLE OF BAD QUOTES , DO NOT DO THIS:
       -  "Here's an educational programming quote:
