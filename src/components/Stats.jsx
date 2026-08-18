@@ -14,6 +14,15 @@ import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Table, TableBody, TableCell, TableRow } from "./ui/table";
 
 export default function Stats({ history, problemKeys, problemWords }) {
+  // Every hook has to run before the empty-history early return below, or React
+  // sees a different hook count on the first race and throws.
+  const storedQuotes = useQuery(api.storedQuotes.getStoredQuotes);
+  const deleteRace = useMutation(api.races.deleteRace);
+
+  const [historyPage, setHistoryPage] = useState(1);
+  const [quotesPage, setQuotesPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
+
   if (history.length === 0) {
     return (
       <div className="card">
@@ -34,13 +43,6 @@ export default function Stats({ history, problemKeys, problemWords }) {
   const averageAccuracy = Math.round(
     history.reduce((acc, curr) => acc + curr.accuracy, 0) / history.length
   );
-
-  const storedQuotes = useQuery(api.storedQuotes.getStoredQuotes);
-  const deleteRace = useMutation(api.races.deleteRace);
-
-  const [historyPage, setHistoryPage] = useState(1);
-  const [quotesPage, setQuotesPage] = useState(1);
-  const ITEMS_PER_PAGE = 10;
 
   const totalHistoryPages = Math.ceil(history.length / ITEMS_PER_PAGE);
   const paginatedHistory = history.slice(

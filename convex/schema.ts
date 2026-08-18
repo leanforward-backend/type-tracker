@@ -20,5 +20,6 @@ export default defineSchema({
   }).index("by_user_id", ["userId"]),
   raceQuotes: defineTable({
     quote: v.string(),
-  }),
+    category: v.optional(v.string()),
+  }).index("by_category", ["category"]),
 });

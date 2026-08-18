@@ -231,6 +231,203 @@ body {
   margin-top: 1rem;
 }
 
+/* Mode selector */
+.mode-bar {
+  display: flex;
+  justify-content: center;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.mode-group {
+  display: flex;
+  gap: 0.25rem;
+  background: var(--bg-card);
+  border: 1px solid #262626;
+  border-radius: var(--radius-md);
+  padding: 0.25rem;
+}
+
+.mode-chip {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-family: "Roboto Mono", monospace;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.9rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.mode-chip:hover {
+  color: var(--text-secondary);
+}
+
+.mode-chip.is-active {
+  color: var(--accent-primary);
+  background: var(--bg-input);
+}
+
+/* Race results */
+.results {
+  text-align: left;
+}
+
+.results-headline {
+  display: flex;
+  gap: 3rem;
+  align-items: baseline;
+  margin-bottom: 1.5rem;
+}
+
+.results-hero-label {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.results-hero-value {
+  font-size: 4rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent-primary);
+}
+
+.results-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.result-tile {
+  background: var(--bg-input);
+  border-radius: var(--radius-md);
+  padding: 0.85rem 1rem;
+}
+
+.result-tile-label {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.result-tile-value {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.result-tile-hint {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.results-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 2rem;
+}
+
+/* Chart */
+.chart-block {
+  margin-top: 0.5rem;
+}
+
+.chart-legend {
+  display: flex;
+  gap: 1.25rem;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  margin-bottom: 0.25rem;
+}
+
+.chart-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.chart-swatch {
+  width: 12px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.chart-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+
+.chart-axis-text {
+  fill: var(--text-muted);
+  font-size: 11px;
+  font-family: "Roboto Mono", monospace;
+}
+
+.chart-series-label {
+  font-size: 12px;
+  font-family: "Roboto Mono", monospace;
+}
+
+.chart-tooltip-title {
+  fill: var(--text-primary);
+  font-size: 12px;
+  font-family: "Roboto Mono", monospace;
+}
+
+.chart-tooltip-row {
+  fill: var(--text-secondary);
+  font-size: 11px;
+  font-family: "Roboto Mono", monospace;
+}
+
+.chart-table {
+  margin-top: 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.chart-table summary {
+  cursor: pointer;
+}
+
+.chart-table-scroll {
+  max-height: 220px;
+  overflow: auto;
+  margin-top: 0.5rem;
+}
+
+.chart-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: "Roboto Mono", monospace;
+}
+
+.chart-table th,
+.chart-table td {
+  text-align: right;
+  padding: 0.2rem 0.6rem;
+  border-bottom: 1px solid var(--bg-input);
+}
+
+.chart-table th {
+  color: var(--text-secondary);
+  position: sticky;
+  top: 0;
+  background: var(--bg-card);
+}
+
 .key-badge {
   background: var(--bg-input);
   border: 1px solid var(--color-error);

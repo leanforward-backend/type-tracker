@@ -206,3 +206,82 @@ export const SENTENCES = [
   "Paxos is a consensus algorithm that ensures a group of distributed processes can agree on a single value despite failures and message delays.",
   "Raft is a consensus algorithm designed to be more understandable than Paxos while providing equivalent fault tolerance and performance guarantees.",
 ];
+
+export const CATEGORY_BACKUPS = {
+  coding: SENTENCES,
+  math: [
+    "Euler's identity e^(i*pi) + 1 = 0 connects five fundamental mathematical constants in a single elegant equation.",
+    "Prime numbers are integers greater than one that have no positive divisors other than one and themselves.",
+    "The Pythagorean theorem states that the square of the hypotenuse is equal to the sum of the squares of the other two sides.",
+    "Calculus provides the mathematical framework for modeling continuous change through derivatives and integrals.",
+    "A matrix determinant reflects the scaling factor of the linear transformation described by that matrix.",
+    "Fourier transforms decompose arbitrary waveforms into sums of sinusoidal frequencies.",
+    "Probability distributions describe the likelihood of obtaining possible values for random variables.",
+    "Bayes' theorem calculates conditional probabilities based on prior knowledge of related conditions.",
+    "Topology investigates geometric properties that remain invariant under continuous deformations such as stretching or twisting.",
+    "Gödel's incompleteness theorems proved that in any consistent formal system capable of arithmetic, undecidable statements exist.",
+    "The Fibonacci sequence generates numbers where each term is the sum of the two preceding terms.",
+    "Eigenvalues and eigenvectors reveal the fundamental axes along which linear transformations stretch space.",
+  ],
+  science: [
+    "Mitochondria are membrane-bound organelles that generate chemical energy via adenosine triphosphate synthesis.",
+    "General relativity describes gravity as the geometric curvature of spacetime caused by mass and energy.",
+    "DNA replication is semiconservative, meaning each daughter molecule contains one parental strand and one newly synthesized strand.",
+    "The Doppler effect causes shifts in observed wave frequency when the source and observer are in relative motion.",
+    "Thermodynamics dictates that the total entropy of an isolated physical system increases over time.",
+    "Quantum superposition allows particles to exist in a linear combination of multiple states until measurement occurs.",
+    "Photosynthesis converts solar photons, carbon dioxide, and water into oxygen and chemical glucose energy.",
+    "Tectonic plates float atop the asthenosphere, and their boundary interactions trigger earthquakes and volcanic eruptions.",
+    "CRISPR-Cas9 is a molecular gene editing technology derived from bacterial adaptive immune defenses.",
+    "The Higgs boson particle confirms the existence of the Higgs field, which endows elementary particles with mass.",
+  ],
+  history: [
+    "The invention of the Gutenberg movable type printing press in 1440 catalyzed the Renaissance and the spread of scientific literacy.",
+    "The Code of Hammurabi established one of the earliest known written legal codes in ancient Mesopotamia.",
+    "The Library of Alexandria was one of the largest and most significant libraries of the ancient world.",
+    "The Magna Carta signed in 1215 established the fundamental legal principle that everyone, including the monarch, is subject to the law.",
+    "The Industrial Revolution transformed predominantly agrarian societies into industrialized urban economies throughout Europe and America.",
+    "The Silk Road was an expansive network of Eurasian trade routes that facilitated cultural, economic, and technological exchange for centuries.",
+    "The Rosetta Stone provided the multilingual key that unlocked modern decipherment of ancient Egyptian hieroglyphics.",
+    "The Apollo 11 mission accomplished the first crewed lunar landing when astronauts touched down on the Moon in July 1969.",
+  ],
+  geography: [
+    "The Marianas Trench in the western Pacific Ocean contains Challenger Deep, the deepest known point on Earth.",
+    "The Amazon River basin discharges greater water volume than the next seven largest rivers combined.",
+    "Plate tectonics formed the Himalayan mountain range through the ongoing collision of the Indian and Eurasian continental plates.",
+    "The Ring of Fire is a major horseshoe-shaped basin in the Pacific Ocean where high seismic and volcanic activity occurs.",
+    "The Sahara is the largest hot desert in the world, spanning across eleven distinct North African countries.",
+    "The Gulf Stream is a powerful warm Atlantic ocean current that significantly moderates the climate of Western Europe.",
+    "Archipelagos like Indonesia and the Philippines are chains of islands formed along tectonic boundaries and volcanic hotspots.",
+  ],
+  art: [
+    "Chiaroscuro is an artistic technique employing strong tonal contrasts between light and dark to create dramatic depth and three-dimensional volume.",
+    "Impressionism originated in 19th-century France, prioritizing accurate depiction of natural light and visible spontaneous brushstrokes.",
+    "The golden ratio is a mathematical proportion widely applied in classical art and architectural composition to achieve aesthetic harmony.",
+    "Fresco painting involves applying water-based pigments directly onto freshly laid wet lime plaster walls.",
+    "Cubism revolutionized painting by breaking subjects down into multi-angled geometric fragments rather than fixed perspective.",
+    "Contrapposto is an Italian sculptural term describing a relaxed human pose where body weight rests primarily on one leg.",
+    "Bauhaus was an influential German design school that synthesized fine arts, craft, and functional industrial architecture.",
+  ],
+  music: [
+    "Equal temperament is a tuning system that divides an octave into twelve equal semitones, enabling music in any key.",
+    "A cadence is a harmonic or melodic progression that provides resolution or closure at the end of a musical phrase.",
+    "Counterpoint is the relationship between two or more musical lines that are harmonically interdependent yet independent in rhythm.",
+    "Syncopation accents unexpected off-beats to create rhythmic variety and infectious syncopated grooves in jazz and funk.",
+    "Sonata form consists of three primary structural sections: exposition, development, and recapitulation.",
+    "The circle of fifths illustrates geometric relationships among the twelve chromatic pitch classes and their corresponding key signatures.",
+    "Timbre describes the unique acoustic tonal color that distinguishes one musical instrument from another at identical pitch and volume.",
+  ],
+};
+
+export function getFallbackBatch(category = "coding", count = 10) {
+  const pool = CATEGORY_BACKUPS[category] || CATEGORY_BACKUPS.coding;
+  const shuffled = [...pool].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count);
+}
+
+export function getFallbackQuote(category = "coding") {
+  const pool = CATEGORY_BACKUPS[category] || CATEGORY_BACKUPS.coding;
+  const randomIndex = Math.floor(Math.random() * pool.length);
+  return pool[randomIndex];
+}

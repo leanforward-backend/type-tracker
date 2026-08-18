@@ -1,106 +1,114 @@
 import { useMutation } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../convex/_generated/api";
+import { buildRaceStats } from "../lib/typingStats";
+import RaceResults from "./results/RaceResults";
+
+// Read the clock through a module-level helper. Every call site below is an
+// event handler or an interval, but a bare Date.now() inside the component body
+// trips the React Compiler's purity rule.
+const nowMs = () => Date.now();
+
+// Created once for the module rather than per race, so remounting the game
+// between races doesn't re-fetch the audio.
+const typeSound = new Audio("https://www.edclub.com/m/audio/typewriter.mp3");
+const errorSound = new Audio("https://www.edclub.com/m/audio/error.mp3");
+
+// The browser rejects play() when the sound is blocked or still loading;
+// without a catch every keypress logs an unhandled rejection.
+const playSound = (sound) => {
+  sound.currentTime = 0;
+  sound.play().catch(() => {});
+};
+
+/**
+ * Renders one race. The parent remounts it via a `key` to start a new race, so
+ * every piece of per-race state here is initialised once and never reset.
+ */
 
 export default function Game({
   onFinish,
   mistakesMode,
   SENTENCES,
-  isReset,
   onReset,
   forwardedRef,
   currentQuoteId,
+  mode = "quote",
+  canSaveQuote = true,
 }) {
-  const [text, setText] = useState("");
+  // Guard against a non-string prop reaching text.split() downstream.
+  const text = typeof SENTENCES === "string" ? SENTENCES : "";
+
   const [input, setInput] = useState("");
   const [startTime, setStartTime] = useState(null);
-  const [wpm, setWpm] = useState(0);
-  const [errors, setErrors] = useState({});
-  const [missedWords, setMissedWords] = useState(new Set());
+  const [now, setNow] = useState(0);
   const [incorrectIndices, setIncorrectIndices] = useState(new Set());
-  const [isFinished, setIsFinished] = useState(false);
+  // Mirrors the keystroke log so the live accuracy readout reads from state
+  // rather than from a ref during render.
+  const [counts, setCounts] = useState({ typed: 0, correct: 0 });
+  const [results, setResults] = useState(null);
   const [saved, setSaved] = useState(false);
 
-  const inputRef = forwardedRef || useRef(null);
+  // Telemetry lives in refs so the finish handler reads it synchronously.
+  // Reading it out of state meant the final keystroke was always missing from
+  // the totals, because the state update hadn't flushed yet.
+  const keystrokesRef = useRef([]);
+  const errorsRef = useRef({});
+  const missedWordsRef = useRef(new Set());
+
+  const localRef = useRef(null);
+  const inputRef = forwardedRef ?? localRef;
   const playAgainRef = useRef(null);
+
+  const isFinished = results !== null;
 
   useEffect(() => {
     if (isFinished) {
-      setTimeout(() => {
-        playAgainRef.current?.focus();
-      }, 0);
+      const id = setTimeout(() => playAgainRef.current?.focus(), 0);
+      return () => clearTimeout(id);
     }
   }, [isFinished]);
 
-  const typeSound = useRef(
-    new Audio("https://www.edclub.com/m/audio/typewriter.mp3")
-  );
-  const errorSound = useRef(
-    new Audio("https://www.edclub.com/m/audio/error.mp3")
-  );
-
   const saveQuote = useMutation(api.storedQuotes.saveQuote);
-
   const deleteQuote = useMutation(api.raceQuotes.deleteQuote);
 
   const handleSaveQuote = () => {
-    saveQuote({
-      quote: SENTENCES,
-    });
+    saveQuote({ quote: SENTENCES });
     setSaved(true);
   };
 
+  // Take focus as soon as a race mounts so the user can start typing straight away.
   useEffect(() => {
-    resetGame();
-  }, [SENTENCES]);
+    inputRef.current?.focus();
+  }, [inputRef]);
 
+  // Drives the live timer and WPM readout. Only the clock lives here now, so
+  // the interval no longer restarts on every keystroke.
   useEffect(() => {
-    if (startTime && !isFinished) {
-      const interval = setInterval(() => {
-        calculateStats();
-      }, 200);
-      return () => clearInterval(interval);
-    }
-  }, [startTime, isFinished, input]);
-
-  const resetGame = () => {
-    // Ensure text is always a string to prevent "text.split is not a function" error
-    const gameText = typeof SENTENCES === "string" ? SENTENCES : "";
-    if (typeof SENTENCES !== "string" && SENTENCES) {
-      console.warn("Game received non-string SENTENCES prop:", SENTENCES);
-    }
-
-    setText(gameText);
-    setInput("");
-    setStartTime(null);
-    setWpm(0);
-    setErrors({});
-    setMissedWords(new Set());
-    setIncorrectIndices(new Set());
-    setIsFinished(false);
-    if (inputRef.current) inputRef.current.focus();
-  };
+    if (!startTime || isFinished) return;
+    const interval = setInterval(() => setNow(nowMs()), 200);
+    return () => clearInterval(interval);
+  }, [startTime, isFinished]);
 
   const removeQuote = async () => {
-    // Delete the quote that was just completed
-    if (currentQuoteId) {
-      try {
-        await deleteQuote({ quoteId: currentQuoteId });
-        console.log("Deleted completed quote");
-      } catch (error) {
-        console.error("Failed to delete quote:", error);
-      }
+    if (!currentQuoteId) return;
+    try {
+      await deleteQuote({ quoteId: currentQuoteId });
+    } catch (error) {
+      console.error("Failed to delete quote:", error);
     }
   };
 
-  const calculateStats = () => {
-    if (!startTime) return;
-    const timeElapsed = (Date.now() - startTime) / 1000 / 60;
-    if (timeElapsed === 0) return;
-
-    const wordsTyped = input.length / 5;
-    const currentWpm = Math.round(wordsTyped / timeElapsed);
-    setWpm(currentWpm);
+  const wordAt = (charIndex) => {
+    const words = text.split(" ");
+    let charCount = 0;
+    for (const word of words) {
+      if (charIndex >= charCount && charIndex < charCount + word.length + 1) {
+        return word;
+      }
+      charCount += word.length + 1; // +1 for the space
+    }
+    return null;
   };
 
   const handleKeyDown = (e) => {
@@ -119,90 +127,77 @@ export default function Game({
       }
     }
 
-    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      e.preventDefault();
-      if (!startTime) {
-        setStartTime(Date.now());
-      }
+    if (e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
 
-      const currentCharIndex = input.length;
-      if (currentCharIndex >= text.length) return;
+    e.preventDefault();
 
-      const expectedChar = text[currentCharIndex];
-      const typedChar = e.key;
+    const currentCharIndex = input.length;
+    if (currentCharIndex >= text.length) return;
 
-      if (typedChar !== expectedChar) {
-        setIncorrectIndices((prev) => new Set(prev).add(currentCharIndex));
-        setErrors((prev) => ({
-          ...prev,
-          [expectedChar]: (prev[expectedChar] || 0) + 1,
-        }));
-        const words = text.split(" ");
-        let charCount = 0;
-        for (const word of words) {
-          if (
-            currentCharIndex >= charCount &&
-            currentCharIndex < charCount + word.length + 1
-          ) {
-            setMissedWords((prev) =>
-              new Set(prev).add(word.replace(/[^a-zA-Z]/g, ""))
-            );
-            break;
-          }
-          charCount += word.length + 1; // +1 for space
-        }
-        errorSound.current.currentTime = 0;
-        errorSound.current.play();
-      } else {
-        typeSound.current.currentTime = 0;
-        typeSound.current.play();
-      }
-
-      setInput((prev) => prev + typedChar);
-
-      if (input.length + 1 === text.length && typedChar === expectedChar) {
-        finishGame(input + typedChar);
-      }
-    }
-  };
-
-  const finishGame = (finalInput) => {
-    setIsFinished(true);
-    const timeElapsed = (Date.now() - startTime) / 1000 / 60;
-    const wordsTyped = finalInput.length / 5;
-    const finalWpm = Math.round(wordsTyped / timeElapsed);
-
-    let correctChars = 0;
-    for (let i = 0; i < text.length; i++) {
-      if (finalInput[i] === text[i]) correctChars++;
+    const raceStart = startTime ?? nowMs();
+    if (!startTime) {
+      setStartTime(raceStart);
+      setNow(raceStart);
     }
 
-    const totalErrors = Object.values(errors).reduce((a, b) => a + b, 0);
-    const totalAttempts = correctChars + totalErrors;
-    const accuracy =
-      totalAttempts > 0
-        ? Math.round((correctChars / totalAttempts) * 100)
-        : 100;
+    const expectedChar = text[currentCharIndex];
+    const typedChar = e.key;
+    const isCorrect = typedChar === expectedChar;
 
-    onFinish({
-      wpm: finalWpm,
-      accuracy,
-      errors,
-      missedWords: Array.from(missedWords),
+    keystrokesRef.current.push({
+      t: nowMs() - raceStart,
+      index: currentCharIndex,
+      correct: isCorrect,
     });
+    setCounts((prev) => ({
+      typed: prev.typed + 1,
+      correct: prev.correct + (isCorrect ? 1 : 0),
+    }));
+
+    if (isCorrect) {
+      playSound(typeSound);
+    } else {
+      setIncorrectIndices((prev) => new Set(prev).add(currentCharIndex));
+      errorsRef.current[expectedChar] =
+        (errorsRef.current[expectedChar] || 0) + 1;
+
+      const word = wordAt(currentCharIndex);
+      if (word) missedWordsRef.current.add(word.replace(/[^a-zA-Z]/g, ""));
+
+      playSound(errorSound);
+    }
+
+    setInput((prev) => prev + typedChar);
+
+    if (currentCharIndex + 1 === text.length && isCorrect) {
+      finishGame(input + typedChar, raceStart);
+    }
   };
 
-  // Render the text with highlights
-  const renderText = () => {
-    return text.split("").map((char, index) => {
+  const finishGame = (finalInput, raceStart) => {
+    const stats = buildRaceStats({
+      text,
+      finalInput,
+      keystrokes: keystrokesRef.current,
+      durationMs: nowMs() - raceStart,
+      errors: { ...errorsRef.current },
+      missedWords: Array.from(missedWordsRef.current),
+      mode,
+    });
+
+    setResults(stats);
+    onFinish(stats);
+  };
+
+  const renderText = () =>
+    text.split("").map((char, index) => {
       let className = "char";
       if (index < input.length) {
         if (input[index] === char) {
-          if (mistakesMode && incorrectIndices.has(index)) {
-            className += " corrected";
-          } else {
-            className += " correct";
-          }
+          className +=
+            mistakesMode && incorrectIndices.has(index)
+              ? " corrected"
+              : " correct";
         } else {
           className += " incorrect";
         }
@@ -216,21 +211,27 @@ export default function Game({
         </span>
       );
     });
+
+  const elapsedMs = startTime ? Math.max(now - startTime, 0) : 0;
+
+  const liveWpm = () => {
+    if (!startTime || elapsedMs < 500) return 0;
+    let correct = 0;
+    for (let i = 0; i < input.length; i++) {
+      if (input[i] === text[i]) correct += 1;
+    }
+    return Math.round(correct / 5 / (elapsedMs / 60000));
   };
 
-  const calculateAccuracy = () => {
-    const totalErrors = Object.values(errors).reduce((a, b) => a + b, 0);
-    if (input.length === 0 && totalErrors === 0) return 100;
+  const liveAccuracy = () =>
+    counts.typed === 0
+      ? 100
+      : Math.round((counts.correct / counts.typed) * 100);
 
-    let correctChars = 0;
-    for (let i = 0; i < input.length; i++) {
-      if (input[i] === text[i]) correctChars++;
-    }
-
-    const totalAttempts = correctChars + totalErrors;
-    return totalAttempts > 0
-      ? Math.round((correctChars / totalAttempts) * 100)
-      : 0;
+  const handleRestart = async () => {
+    setSaved(false);
+    await removeQuote();
+    onReset();
   };
 
   return (
@@ -241,67 +242,60 @@ export default function Game({
       ref={inputRef}
       style={{ outline: "none" }}
     >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          marginBottom: "1rem",
-        }}
-      >
-        <div className="stat-label">
-          WPM:
-          <span style={{ color: "var(--accent-primary)", fontSize: "1.2em" }}>
-            {wpm}
-          </span>
-        </div>
-        <div className="stat-label">
-          Accuracy:
-          <span style={{ color: "var(--accent-primary)", fontSize: "1.2em" }}>
-            {calculateAccuracy()}%
-          </span>
-        </div>
-        <div className="stat-label">
-          Time:
-          <span style={{ color: "var(--text-primary)" }}>
-            {startTime ? Math.round((Date.now() - startTime) / 1000) : 0}s
-          </span>
-        </div>
-      </div>
-
-      <div className="typing-area">{renderText()}</div>
-
-      <div
-        style={{
-          marginTop: "2rem",
-          color: "var(--text-secondary)",
-          fontSize: "0.9rem",
-        }}
-      >
-        {isFinished ? "Complete!" : "Start typing to begin..."}
-      </div>
-
-      {isFinished && (
-        <div className=" items-center justify-center flex gap-2 mt-2">
-          <button
-            ref={playAgainRef}
-            className="btn btn-primary"
-            onClick={async () => {
-              setSaved(false);
-              await removeQuote();
-              onReset();
+      {isFinished ? (
+        <RaceResults
+          stats={results}
+          onRestart={handleRestart}
+          onSaveQuote={handleSaveQuote}
+          saved={saved}
+          canSaveQuote={canSaveQuote}
+          restartRef={playAgainRef}
+        />
+      ) : (
+        <>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              marginBottom: "1rem",
             }}
           >
-            Play Again
-          </button>
-          <button
-            className={"btn stats"}
-            onClick={() => {
-              handleSaveQuote();
+            <div className="stat-label">
+              WPM:
+              <span
+                style={{ color: "var(--accent-primary)", fontSize: "1.2em" }}
+              >
+                {liveWpm()}
+              </span>
+            </div>
+            <div className="stat-label">
+              Accuracy:
+              <span
+                style={{ color: "var(--accent-primary)", fontSize: "1.2em" }}
+              >
+                {liveAccuracy()}%
+              </span>
+            </div>
+            <div className="stat-label">
+              Time:
+              <span style={{ color: "var(--text-primary)" }}>
+                {Math.round(elapsedMs / 1000)}s
+              </span>
+            </div>
+          </div>
+
+          <div className="typing-area">{renderText()}</div>
+
+          <div
+            style={{
+              marginTop: "2rem",
+              color: "var(--text-secondary)",
+              fontSize: "0.9rem",
             }}
           >
-            {saved ? "Saved!" : "Save Quote"}
-          </button>
-        </div>
+            Start typing to begin...
+          </div>
+        </>
       )}
     </div>
   );

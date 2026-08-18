@@ -10,7 +10,7 @@ import ParticleBackground from "./ParticleBackground";
 
 const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
 
-export const AiChat = ({ SENTENCES }) => {
+export const AiChat = ({ SENTENCES, category = "coding" }) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -19,6 +19,26 @@ export const AiChat = ({ SENTENCES }) => {
   const chatSessionRef = useRef(null);
   const messagesEndRef = useRef(null);
   const scrollContainerRef = useRef(null);
+
+  const getSystemInstruction = (cat) => {
+    switch (cat) {
+      case "math":
+        return "You are an expert mathematician and math educator. Explain the following mathematical theorem, formula, or concept clearly with intuitive context, formal explanation, and helpful educational links or resources.";
+      case "science":
+        return "You are a scientific researcher and educator. Explain the following scientific principle or discovery clearly with empirical background, practical real-world context, and links to reputable educational resources.";
+      case "history":
+        return "You are a historian and history educator. Explain the following historical event, era, or milestone clearly with historical context, broader implications, and links to historical resources.";
+      case "geography":
+        return "You are a geographer and earth scientist. Explain the following geographical feature, landmark, or geological phenomenon with geographical context and reference links.";
+      case "art":
+        return "You are an art historian and visual art educator. Explain the following art movement, artist technique, or aesthetic concept with artistic context and reference links.";
+      case "music":
+        return "You are a musicologist and music theorist. Explain the following music theory concept, acoustic principle, or compositional technique with harmonic/structural context and reference links.";
+      case "coding":
+      default:
+        return "You are a senior developer describing the concept to a junior dev. Provide technical details, links to docs, a concise conceptual explanation, and code examples if relevant.";
+    }
+  };
 
   const scrollToBottom = () => {
     if (scrollContainerRef.current) {
@@ -36,7 +56,7 @@ export const AiChat = ({ SENTENCES }) => {
     const handleScroll = () => {
       const { scrollTop, scrollHeight, clientHeight } = container;
       setIsNearBottom(
-        scrollHeight - scrollTop - clientHeight < clientHeight * 0.1
+        scrollHeight - scrollTop - clientHeight < clientHeight * 0.1,
       );
     };
 
@@ -66,7 +86,7 @@ export const AiChat = ({ SENTENCES }) => {
     }
 
     const sortedSupports = [...supports].sort(
-      (a, b) => (b.segment?.endIndex ?? 0) - (a.segment?.endIndex ?? 0)
+      (a, b) => (b.segment?.endIndex ?? 0) - (a.segment?.endIndex ?? 0),
     );
 
     for (const support of sortedSupports) {
@@ -103,19 +123,21 @@ export const AiChat = ({ SENTENCES }) => {
         googleSearch: {},
       };
 
+      const instruction = getSystemInstruction(category);
+
       const config = {
         tools: [groundingTool],
-        systemInstruction: `You are a senior developer describing the following concept to a junior dev. Provide technical details and links to docs. Give your information about the subject in a paragrpah above as well as techincal details / showcase code if relevent, and your links to docs or other resources below.`,
+        systemInstruction: instruction,
       };
 
       const chat = ai.chats.create({
-        model: "gemini-2.5-flash-lite",
+        model: "gemini-flash-latest",
         config,
       });
       chatSessionRef.current = chat;
 
       const result = await chat.sendMessageStream({
-        message: `You are a senior developer describing the following concept to a junior dev. Don't give any greeting, Provide technical details and links to docs. Give your information about the subject in a paragrpah above as well as techincal details / showcase code if relevent, and your links to docs or other resources below: "${SENTENCES}"`,
+        message: `${instruction} Don't give any greeting. Provide clear insights and links to docs/resources below: "${SENTENCES}"`,
       });
 
       let accumulatedText = "";
@@ -233,7 +255,7 @@ export const AiChat = ({ SENTENCES }) => {
   useEffect(() => {
     setMessages([]);
     chatSessionRef.current = null;
-  }, [SENTENCES]);
+  }, [SENTENCES, category]);
 
   if (messages.length === 0) {
     return (
