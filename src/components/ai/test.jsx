@@ -10,7 +10,7 @@ export default function Test() {
 
     async function run() {
       const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash", // Use a valid model name
+        model: "gemini-3.7-flash",
         contents:
           "Find the race condition in this multi-threaded C++ snippet: [code here]",
       });

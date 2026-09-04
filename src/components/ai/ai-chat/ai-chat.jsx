@@ -1,14 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { GoogleGenAI } from "@google/genai";
 import { SendHorizontal } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
+import { ai, getAvailableFlashModels, markModelFailed } from "../geminiClient";
 import ParticleBackground from "./ParticleBackground";
-
-const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
 
 export const AiChat = ({ SENTENCES, category = "coding" }) => {
   const [messages, setMessages] = useState([]);
@@ -114,84 +112,120 @@ export const AiChat = ({ SENTENCES, category = "coding" }) => {
     return text;
   }
 
+  const createChatSession = async (useGrounding = false, modelName = "gemini-3.7-flash") => {
+    const instruction = getSystemInstruction(category);
+    const config = {
+      systemInstruction: instruction,
+    };
+
+    if (useGrounding) {
+      config.tools = [{ googleSearch: {} }];
+    }
+
+    return ai.chats.create({
+      model: modelName,
+      config,
+    });
+  };
+
   const startChat = async () => {
     setIsLoading(true);
     setIsStreaming(true);
     setMessages([]);
-    try {
-      const groundingTool = {
-        googleSearch: {},
-      };
 
-      const instruction = getSystemInstruction(category);
+    const instruction = getSystemInstruction(category);
+    const promptMessage = `${instruction} Don't give any greeting. Provide clear insights and links to docs/resources below: "${SENTENCES}"`;
 
-      const config = {
-        tools: [groundingTool],
-        systemInstruction: instruction,
-      };
+    const candidateModels = await getAvailableFlashModels();
+    let lastError = null;
 
-      const chat = ai.chats.create({
-        model: "gemini-flash-latest",
-        config,
-      });
-      chatSessionRef.current = chat;
+    for (let i = 0; i < candidateModels.length; i++) {
+      const modelName = candidateModels[i];
+      try {
+        console.log(`[ai-chat] Connecting with model: ${modelName}`);
+        const chat = await createChatSession(false, modelName);
+        chatSessionRef.current = chat;
 
-      const result = await chat.sendMessageStream({
-        message: `${instruction} Don't give any greeting. Provide clear insights and links to docs/resources below: "${SENTENCES}"`,
-      });
-
-      let accumulatedText = "";
-      let finalResponse = null;
-
-      setMessages([{ role: "model", text: "" }]);
-
-      for await (const chunk of result) {
-        const chunkText = chunk.text || "";
-        accumulatedText += chunkText;
-        finalResponse = chunk;
-        setMessages((prev) => {
-          const newArr = [...prev];
-          newArr[0] = { role: "model", text: accumulatedText };
-          return newArr;
+        const result = await chat.sendMessageStream({
+          message: promptMessage,
         });
-      }
 
-      setIsStreaming(false);
+        let accumulatedText = "";
+        let finalResponse = null;
 
-      if (finalResponse && accumulatedText) {
-        const fullResponse = {
-          ...finalResponse,
-          text: accumulatedText,
-        };
+        setMessages([{ role: "model", text: "" }]);
 
-        const textWithCitations = addCitations(fullResponse);
-        setMessages((prev) => {
-          const newArr = [...prev];
-          newArr[0] = { role: "model", text: textWithCitations };
-          return newArr;
-        });
+        for await (const chunk of result) {
+          const chunkText = chunk.text || "";
+          accumulatedText += chunkText;
+          finalResponse = chunk;
+          setMessages((prev) => {
+            const newArr = [...prev];
+            newArr[0] = { role: "model", text: accumulatedText };
+            return newArr;
+          });
+        }
+
+        setIsStreaming(false);
+
+        if (finalResponse && accumulatedText) {
+          const fullResponse = {
+            ...finalResponse,
+            text: accumulatedText,
+          };
+
+          const textWithCitations = addCitations(fullResponse);
+          setMessages((prev) => {
+            const newArr = [...prev];
+            newArr[0] = { role: "model", text: textWithCitations };
+            return newArr;
+          });
+        }
+
+        setIsLoading(false);
+        return;
+      } catch (error) {
+        lastError = error;
+        console.warn(
+          `[ai-chat] Model '${modelName}' failed:`,
+          error.message || error
+        );
+        markModelFailed(modelName);
+
+        if (i < candidateModels.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 600));
+        }
       }
-    } catch (error) {
-      if (error.message?.includes("429") || error.status === 429) {
-        console.warn("Gemini API Rate Limit Exceeded");
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "model",
-            text: "Rate limit exceeded. Please wait a moment before trying again.",
-          },
-        ]);
-      } else {
-        console.error("Error generating content:", error);
-        setMessages((prev) => [
-          ...prev,
-          { role: "model", text: "Error generating content." },
-        ]);
-      }
-      setIsStreaming(false);
-    } finally {
-      setIsLoading(false);
     }
+
+    // If all attempts failed
+    if (lastError?.message?.includes("429") || lastError?.status === 429) {
+      console.warn("Gemini API Rate Limit Exceeded");
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "model",
+          text: "Rate limit exceeded. Please wait a moment before trying again.",
+        },
+      ]);
+    } else if (lastError?.message?.includes("503") || lastError?.status === 503) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "model",
+          text: "The model is currently experiencing high demand. Please try again in a few seconds.",
+        },
+      ]);
+    } else {
+      console.error("Error generating content:", lastError);
+      setMessages((prev) => [
+        ...prev,
+        { role: "model", text: "Error generating content. Please check your API key or model settings." },
+      ]);
+    }
+
+    setIsStreaming(false);
+    setIsLoading(false);
   };
 
   const handleSendMessage = async () => {
@@ -204,6 +238,11 @@ export const AiChat = ({ SENTENCES, category = "coding" }) => {
     setIsStreaming(true);
 
     try {
+      if (!chatSessionRef.current) {
+        const models = await getAvailableFlashModels();
+        chatSessionRef.current = await createChatSession(false, models[0] || "gemini-3.7-flash");
+      }
+
       const result = await chatSessionRef.current.sendMessageStream({
         message: userMsg,
       });

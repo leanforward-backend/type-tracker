@@ -1,11 +1,17 @@
-import { GoogleGenAI } from "@google/genai";
+import { ai, getAvailableFlashModels, markModelFailed } from "./geminiClient";
 
-const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
-
-const RATE_LIMIT_PER_MINUTE = 10;
+const RATE_LIMIT_PER_MINUTE = 15;
 const MIN_DELAY_MS = Math.ceil((60 * 1000) / RATE_LIMIT_PER_MINUTE);
 
 let lastRequestTime = 0;
+
+async function getLatestModel(forceNextFallback = false, failedModel = null) {
+  if (failedModel) {
+    markModelFailed(failedModel);
+  }
+  const models = await getAvailableFlashModels();
+  return models[0] || "gemini-3.7-flash";
+}
 
 async function waitForRateLimit() {
   const now = Date.now();
@@ -91,6 +97,17 @@ const CATEGORY_PROMPT_CONFIG = {
   },
 };
 
+function cleanQuote(quote) {
+  if (!quote || typeof quote !== "string") return "";
+  let text = quote.trim();
+  text = text.replace(/^["']|["']$/g, "");
+  text = text.replace(/^\d+[\.\)]\s*/, "");
+  text = text.replace(/^[-*•]\s*/, "");
+  text = text.replace(/[`]/g, "");
+  text = text.trim();
+  return text;
+}
+
 export async function generateQuote(category = "coding", retryCount = 0) {
   try {
     await waitForRateLimit();
@@ -98,10 +115,11 @@ export async function generateQuote(category = "coding", retryCount = 0) {
     const categoryKey = CATEGORY_PROMPT_CONFIG[category] ? category : "coding";
     const configData = CATEGORY_PROMPT_CONFIG[categoryKey];
 
+    const model = await getLatestModel(retryCount > 0);
     const chat = ai.chats.create({
-      model: "gemini-2.5-flash",
+      model,
       config: {
-        temperature: 1.2,
+        temperature: 1.0,
       },
     });
 
@@ -127,8 +145,6 @@ ${exampleText}
       Return ONLY the plain sentence text without any surrounding quotation marks or prefixes.`,
     });
 
-    console.log("AI Result keys:", Object.keys(result));
-
     let quote = "";
 
     // Handle different SDK response formats
@@ -140,11 +156,7 @@ ${exampleText}
       quote = result.response.text();
     }
 
-    // Clean up common AI response patterns
-    quote = quote?.trim() || "";
-    quote = quote.replace(/^["']|["']$/g, "");
-    quote = quote.replace(/^\d+\.\s*/, "");
-    quote = quote.trim();
+    quote = cleanQuote(quote);
 
     if (quote.length < 30 || quote.length > 500) {
       console.warn(
@@ -157,42 +169,92 @@ ${exampleText}
   } catch (error) {
     console.error(`Error generating quote for ${category} (attempt ${retryCount + 1}):`, error);
 
-    if (error.message?.includes("429") || error.status === 429) {
-      throw new Error(
-        "Rate limit exceeded. Please wait before generating more quotes."
-      );
-    }
+    const isQuotaOrModelError =
+      error.message?.includes("429") ||
+      error.status === 429 ||
+      error.message?.includes("RESOURCE_EXHAUSTED") ||
+      error.message?.includes("Quota exceeded") ||
+      error.message?.includes("not found");
 
     if (retryCount < 3) {
-      console.log(`Retrying quote generation (attempt ${retryCount + 2})...`);
+      console.log(`Retrying quote generation with model fallback (attempt ${retryCount + 2})...`);
       return generateQuote(category, retryCount + 1);
+    }
+
+    if (isQuotaOrModelError) {
+      throw new Error(
+        "Rate limit or quota exceeded. Please wait before generating more quotes."
+      );
     }
 
     throw error;
   }
 }
 
-export async function generateQuotesBatch(category = "coding", count = 20) {
-  console.log(`Generating new quotes for category '${category}'...`);
-  const maxBatchSize = Math.min(count, 10);
-  const quotes = [];
-  const errors = [];
+export async function generateQuotesBatch(category = "coding", count = 10, retryCount = 0) {
+  console.log(`Generating batch of ${count} new quotes for category '${category}'...`);
+  const targetCount = Math.min(Math.max(count, 1), 10);
+  const categoryKey = CATEGORY_PROMPT_CONFIG[category] ? category : "coding";
+  const configData = CATEGORY_PROMPT_CONFIG[categoryKey];
 
-  for (let i = 0; i < maxBatchSize; i++) {
-    try {
-      const quote = await generateQuote(category);
-      quotes.push(quote);
-    } catch (error) {
-      console.error(`Error generating quote ${i + 1} for ${category}:`, error);
-      errors.push(error);
+  let currentModel = null;
+  try {
+    await waitForRateLimit();
+    currentModel = await getLatestModel();
 
-      if (error.message?.includes("Rate limit")) {
-        console.warn("Rate limit hit, stopping batch generation");
-        break;
-      }
+    const response = await ai.models.generateContent({
+      model: currentModel,
+      contents: `Generate exactly ${targetCount} distinct, educational quotes or concept facts about ${configData.domain} for typing practice.
+      
+Requirements:
+- ${configData.requirements}
+- Each quote must be 50 to 300 characters long.
+- No markdown formatting, no bullet symbols, no numbering.
+- Respond with a raw JSON array of strings: ["quote 1", "quote 2", ...]`,
+      config: {
+        temperature: 1.0,
+        responseMimeType: "application/json",
+      },
+    });
+
+    let rawText = "";
+    if (typeof response.text === "string") {
+      rawText = response.text;
+    } else if (typeof response.text === "function") {
+      rawText = response.text();
     }
-  }
 
-  return quotes.slice(0, count);
+    let parsedQuotes = [];
+    try {
+      const json = JSON.parse(rawText.trim());
+      if (Array.isArray(json)) {
+        parsedQuotes = json.map(cleanQuote).filter((q) => q.length >= 30 && q.length <= 500);
+      }
+    } catch {
+      // If not strict JSON, parse lines
+      parsedQuotes = rawText
+        .split("\n")
+        .map(cleanQuote)
+        .filter((q) => q.length >= 30 && q.length <= 500);
+    }
+
+    if (parsedQuotes.length > 0) {
+      return parsedQuotes.slice(0, targetCount);
+    }
+
+    throw new Error("No valid quotes parsed from AI response");
+  } catch (error) {
+    console.error(`Error in generateQuotesBatch for ${category} (attempt ${retryCount + 1}):`, error);
+    if (currentModel) {
+      markModelFailed(currentModel);
+    }
+
+    if (retryCount < 2) {
+      console.log(`Retrying batch generation with fallback model (attempt ${retryCount + 2})...`);
+      return generateQuotesBatch(category, count, retryCount + 1);
+    }
+
+    throw error;
+  }
 }
 

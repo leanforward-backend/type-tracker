@@ -35,6 +35,7 @@ function App() {
 
   const seededCategories = useRef(new Set());
   const isGeneratingQuotes = useRef(false);
+  const lastGenerationTime = useRef({});
 
   const availableQuotes = useQuery(api.raceQuotes.getAvailableQuotes, {
     category,
@@ -84,8 +85,14 @@ function App() {
   const hasSelectedInitialDbQuote = useRef(false);
 
   const generateNewQuotesIfNeeded = async (targetCategory = category) => {
+    const now = Date.now();
+    const lastAttempt = lastGenerationTime.current[targetCategory] || 0;
+    // Don't retry the same category within 30 seconds to prevent rapid-fire requests
+    if (now - lastAttempt < 30000) return;
     if (isGeneratingQuotes.current) return;
+
     isGeneratingQuotes.current = true;
+    lastGenerationTime.current[targetCategory] = now;
 
     try {
       console.log(`Generating new AI quotes for '${targetCategory}'...`);
@@ -93,13 +100,15 @@ function App() {
       if (newQuotes.length > 0) {
         await saveQuotesBatch({ quotes: newQuotes, category: targetCategory });
         console.log(`Generated and saved ${newQuotes.length} new AI quotes for '${targetCategory}'`);
+      } else {
+        throw new Error("No quotes returned from AI generator");
       }
     } catch (error) {
       console.error(`Failed to generate new quotes for '${targetCategory}':`, error);
       // Only fallback-seed if AI generation completely fails and DB is empty
       if (quoteCount === 0 && !seededCategories.current.has(targetCategory)) {
         seededCategories.current.add(targetCategory);
-        const fallbackBatch = getFallbackBatch(targetCategory, 5);
+        const fallbackBatch = getFallbackBatch(targetCategory, 10);
         await saveQuotesBatch({ quotes: fallbackBatch, category: targetCategory }).catch(() => {});
       }
     } finally {
@@ -149,20 +158,16 @@ function App() {
     setRaceId((id) => id + 1);
   }, [mode, wordCount]);
 
-  // Monitor quote pool: if low or empty, proactively trigger AI quote generation
+  // Monitor quote pool: if empty or low, proactively trigger AI quote generation
   useEffect(() => {
     if (mode === "words") return;
 
-    if (quoteCount === 0 && !isGeneratingQuotes.current) {
-      console.log(`No quotes for '${category}', generating AI quotes...`);
+    if (quoteCount === 0) {
       generateNewQuotesIfNeeded(category);
     } else if (
-      availableQuotes &&
-      availableQuotes.length > 0 &&
-      availableQuotes.length < 10 &&
-      !isGeneratingQuotes.current
+      availableQuotes !== undefined &&
+      availableQuotes.length < 3
     ) {
-      console.log(`Pool low (${availableQuotes.length} quotes for ${category}), generating more...`);
       generateNewQuotesIfNeeded(category);
     }
   }, [availableQuotes?.length, quoteCount, mode, category]);
@@ -205,7 +210,7 @@ function App() {
           </h1>
           <div className="title">
             {getMistakes === undefined ? (
-              <Toggle size="sm">Loading Option</Toggle>
+              <Toggle size="sm" pressed={false} disabled>Loading Option</Toggle>
             ) : (
               <Toggle
                 size="lg"
