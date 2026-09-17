@@ -33,9 +33,15 @@ function App() {
 
   const getMistakes = useQuery(api.mistakes.getMistakes);
 
-  const seededCategories = useRef(new Set());
+  const seenQuoteIds = useRef(new Set());
   const isGeneratingQuotes = useRef(false);
   const lastGenerationTime = useRef({});
+  const refillTimer = useRef(null);
+  const refillRequested = useRef(false);
+  const hasKickedOffInitialBatch = useRef(false);
+  // Latest render values for callbacks that run later (timers, finally
+  // blocks), which would otherwise close over stale props.
+  const latest = useRef({});
 
   const availableQuotes = useQuery(api.raceQuotes.getAvailableQuotes, {
     category,
@@ -44,7 +50,45 @@ function App() {
     category,
   });
   const saveQuotesBatch = useMutation(api.raceQuotes.saveQuotesBatch);
-  const rotateQuotes = useMutation(api.raceQuotes.rotateQuotes);
+  const deleteQuote = useMutation(api.raceQuotes.deleteQuote);
+
+  // Saving the on-screen quote to the user's list, available before the race
+  // starts (the results screen has its own button for afterwards). The stored
+  // list is only queried when signed in, because the query throws otherwise.
+  const saveStoredQuote = useMutation(api.storedQuotes.saveQuote);
+  const removeStoredQuote = useMutation(api.storedQuotes.removeQuote);
+  const storedQuotes = useQuery(
+    api.storedQuotes.getStoredQuotes,
+    isAuthenticated ? {} : "skip"
+  );
+  // null = trust the server; true/false = optimistic state after a click,
+  // held until the stored list catches up or the quote changes.
+  const [savedOverride, setSavedOverride] = useState(null);
+  const savedOnServer = storedQuotes?.some((q) => q.quote === sentance) ?? false;
+  const quoteAlreadySaved = savedOverride ?? savedOnServer;
+
+  const handleToggleSaveQuote = () => {
+    if (!isAuthenticated || !sentance) return;
+    const next = !quoteAlreadySaved;
+    setSavedOverride(next);
+    const mutation = next
+      ? saveStoredQuote({ quote: sentance })
+      : removeStoredQuote({ quote: sentance });
+    mutation.catch((err) => {
+      console.error(next ? "Failed to save quote:" : "Failed to remove saved quote:", err);
+      setSavedOverride(null);
+    });
+    handleFocusClick();
+  };
+  latest.current = { category, mode, availableQuotes, quoteCount };
+
+  const retireQuote = (quoteId) => {
+    if (!quoteId) return;
+    seenQuoteIds.current.delete(quoteId);
+    deleteQuote({ quoteId }).catch((err) =>
+      console.error("Failed to retire quote:", err)
+    );
+  };
 
   const handleSetMistakes = (pressed) => {
     if (isAuthenticated) {
@@ -83,36 +127,126 @@ function App() {
   const displayHistory = isAuthenticated && raceHistory ? raceHistory : history;
 
   const hasSelectedInitialDbQuote = useRef(false);
+  // The quote that was on screen when the user switched to words mode, so
+  // switching back restores it instead of leaving the word list in place.
+  const parkedQuoteRef = useRef(null); // { text, id } | null
 
-  const generateNewQuotesIfNeeded = async (targetCategory = category) => {
+  // Keep each category's pool topped up to TARGET_POOL_SIZE. Refilling starts
+  // once it dips below REFILL_BELOW rather than on every single draw, so one
+  // generation request restocks several quotes instead of one per race.
+  const TARGET_POOL_SIZE = 20;
+  const REFILL_BELOW = 15;
+  const REFILL_THROTTLE_MS = 30000;
+  // Every page load also adds a few fresh quotes, so the pool keeps turning
+  // over for a returning user even when it is already at target.
+  const INITIAL_BATCH_SIZE = 5;
+
+  const poolIsLow = () => {
+    const { mode: m, availableQuotes: quotes, quoteCount: count } = latest.current;
+    if (m === "words") return false;
+    if (count === 0) return true;
+    return quotes !== undefined && quotes.length < REFILL_BELOW;
+  };
+
+  /** How many quotes are needed to bring the current category back to target. */
+  const poolDeficit = () => {
+    const { availableQuotes: quotes, quoteCount: count } = latest.current;
+    const have = quotes?.length ?? count ?? 0;
+    return Math.max(TARGET_POOL_SIZE - have, 1);
+  };
+
+  /**
+   * Re-checks the pool after `delayMs` and refills if it is still low. Only one
+   * timer is kept; a second request while one is pending is already covered.
+   */
+  const scheduleRefill = (delayMs, why) => {
+    if (refillTimer.current) return;
+    if (why) {
+      console.log(
+        `Quote refill deferred (${why}); retrying in ${Math.ceil(delayMs / 1000)}s`
+      );
+    }
+    refillTimer.current = setTimeout(() => {
+      refillTimer.current = null;
+      refillIfLow();
+    }, delayMs);
+  };
+
+  const refillIfLow = () => {
+    if (poolIsLow()) generateNewQuotesIfNeeded(latest.current.category);
+  };
+
+  const generateNewQuotesIfNeeded = async (
+    targetCategory = category,
+    { minCount = 0, reason = "" } = {}
+  ) => {
     const now = Date.now();
     const lastAttempt = lastGenerationTime.current[targetCategory] || 0;
-    // Don't retry the same category within 30 seconds to prevent rapid-fire requests
-    if (now - lastAttempt < 30000) return;
-    if (isGeneratingQuotes.current) return;
+    const sinceLast = now - lastAttempt;
+
+    // Neither guard may drop the request silently. The pool-monitor effect only
+    // re-runs when the pool size changes, and an empty pool stays at zero, so a
+    // request dropped here would never be made again. Defer it instead.
+    if (sinceLast < REFILL_THROTTLE_MS) {
+      scheduleRefill(REFILL_THROTTLE_MS - sinceLast + 100, "throttled");
+      return;
+    }
+    if (isGeneratingQuotes.current) {
+      refillRequested.current = true;
+      return;
+    }
 
     isGeneratingQuotes.current = true;
+    refillRequested.current = false;
     lastGenerationTime.current[targetCategory] = now;
 
     try {
-      console.log(`Generating new AI quotes for '${targetCategory}'...`);
-      const newQuotes = await generateQuotesBatch(targetCategory, 10);
+      const wanted = Math.max(poolDeficit(), minCount);
+      console.log(
+        `Generating ${wanted} new AI quotes for '${targetCategory}'${reason ? ` (${reason})` : ""}...`
+      );
+      const existing = (latest.current.availableQuotes || []).map((q) => q.quote);
+      const newQuotes = await generateQuotesBatch(targetCategory, wanted, existing);
       if (newQuotes.length > 0) {
-        await saveQuotesBatch({ quotes: newQuotes, category: targetCategory });
-        console.log(`Generated and saved ${newQuotes.length} new AI quotes for '${targetCategory}'`);
+        // saveQuotesBatch returns how many actually landed -- it drops any that
+        // duplicate what's already stored, so this is often lower than the
+        // number generated. Reporting newQuotes.length here claimed successes
+        // that never reached the table.
+        const inserted = await saveQuotesBatch({
+          quotes: newQuotes,
+          category: targetCategory,
+        });
+        console.log(
+          `Generated ${newQuotes.length} AI quotes for '${targetCategory}', saved ${inserted} new (${newQuotes.length - inserted} were duplicates)`
+        );
       } else {
         throw new Error("No quotes returned from AI generator");
       }
     } catch (error) {
       console.error(`Failed to generate new quotes for '${targetCategory}':`, error);
-      // Only fallback-seed if AI generation completely fails and DB is empty
-      if (quoteCount === 0 && !seededCategories.current.has(targetCategory)) {
-        seededCategories.current.add(targetCategory);
-        const fallbackBatch = getFallbackBatch(targetCategory, 10);
-        await saveQuotesBatch({ quotes: fallbackBatch, category: targetCategory }).catch(() => {});
-      }
+      // AI generation is unavailable (usually daily quota), so keep the pool
+      // stocked from the built-in backups. There's deliberately no
+      // once-per-session guard: quotes are consumed as they're shown, so the
+      // pool needs topping up repeatedly. saveQuotesBatch dedupes, and the 30s
+      // throttle above bounds how often this runs.
+      const fallbackBatch = getFallbackBatch(targetCategory, poolDeficit());
+      await saveQuotesBatch({
+        quotes: fallbackBatch,
+        category: targetCategory,
+      }).catch(() => {});
     } finally {
       isGeneratingQuotes.current = false;
+      if (refillRequested.current) {
+        // Something asked for a refill while we were busy (e.g. the pool was
+        // emptied mid-generation). Give it its turn; the throttle will space it.
+        refillRequested.current = false;
+        refillIfLow();
+      } else {
+        // Safety net: if the pool is still low once the throttle has passed
+        // (every quote was a duplicate, the save failed), try again. This is a
+        // no-op when the pool is healthy.
+        scheduleRefill(REFILL_THROTTLE_MS + 100);
+      }
     }
   };
 
@@ -125,10 +259,29 @@ function App() {
       return;
     }
 
+    // Retire whatever was on screen. Previously this only happened via the
+    // results screen's restart button, so skipping or replacing a quote left it
+    // in the pool to be drawn again.
+    retireQuote(currentQuoteId);
+
     if (quotesList && quotesList.length > 0) {
-      // Pick a random quote from available database quotes
-      const randomIndex = Math.floor(Math.random() * quotesList.length);
-      const selectedQuote = quotesList[randomIndex];
+      // Draw without replacement: a plain random pick over a pool this small
+      // repeats constantly even when the pool is healthy.
+      // The query result is a snapshot that still lists the quote just retired,
+      // so exclude it from both passes.
+      const candidates = quotesList.filter((q) => q.id !== currentQuoteId);
+      const unseen = candidates.filter((q) => !seenQuoteIds.current.has(q.id));
+      if (unseen.length === 0) seenQuoteIds.current.clear();
+
+      const pool = unseen.length > 0 ? unseen : candidates;
+      if (pool.length === 0) {
+        setSentance(getFallbackQuote(targetCategory));
+        setCurrentQuoteId(null);
+        return;
+      }
+
+      const selectedQuote = pool[Math.floor(Math.random() * pool.length)];
+      seenQuoteIds.current.add(selectedQuote.id);
       setSentance(selectedQuote.quote);
       setCurrentQuoteId(selectedQuote.id);
       return;
@@ -142,11 +295,41 @@ function App() {
   const handleCategoryChange = (newCategory) => {
     if (newCategory === category) return;
     hasSelectedInitialDbQuote.current = false;
+    // A quote parked while in words mode belongs to the old category.
+    parkedQuoteRef.current = null;
     setCategory(newCategory);
+    handleFocusClick();
+    // In words mode the text on screen is a word list and stays put; the new
+    // category only matters once the user returns to quotes.
+    if (mode === "words") return;
     setRaceId((id) => id + 1);
-    const fallback = getFallbackQuote(newCategory);
-    setSentance(fallback);
+    // Clear rather than show a placeholder: the pool for the new category is
+    // still loading, and the effect below picks from it the moment it lands.
+    setSentance("");
     setCurrentQuoteId(null);
+  };
+
+  const handleModeChange = (newMode) => {
+    if (newMode === mode) return;
+    if (newMode === "words") {
+      // Park the current quote; the words effect below replaces the text.
+      parkedQuoteRef.current = sentance ? { text: sentance, id: currentQuoteId } : null;
+    } else {
+      const parked = parkedQuoteRef.current;
+      parkedQuoteRef.current = null;
+      if (parked) {
+        setSentance(parked.text);
+        setCurrentQuoteId(parked.id);
+      } else {
+        // Nothing to restore: clear the word list so the opening-quote effect
+        // picks a fresh quote from the pool.
+        hasSelectedInitialDbQuote.current = false;
+        setSentance("");
+        setCurrentQuoteId(null);
+      }
+      setRaceId((id) => id + 1);
+    }
+    setMode(newMode);
     handleFocusClick();
   };
 
@@ -158,40 +341,76 @@ function App() {
     setRaceId((id) => id + 1);
   }, [mode, wordCount]);
 
+  // First load: once the pool is known, generate a fresh batch regardless of
+  // how full it is. Runs before the low-pool monitor below so that, when both
+  // want to generate at the same moment, this one wins and asks for at least
+  // INITIAL_BATCH_SIZE (or the full deficit if that is larger); the monitor's
+  // request is then queued behind it and turns into a no-op once the pool is
+  // healthy.
+  useEffect(() => {
+    if (mode !== "quote" || availableQuotes === undefined) return;
+    if (hasKickedOffInitialBatch.current) return;
+    hasKickedOffInitialBatch.current = true;
+    generateNewQuotesIfNeeded(category, {
+      minCount: INITIAL_BATCH_SIZE,
+      reason: "fresh batch on page load",
+    });
+  }, [availableQuotes, mode, category]);
+
   // Monitor quote pool: if empty or low, proactively trigger AI quote generation
   useEffect(() => {
-    if (mode === "words") return;
-
-    if (quoteCount === 0) {
-      generateNewQuotesIfNeeded(category);
-    } else if (
-      availableQuotes !== undefined &&
-      availableQuotes.length < 3
-    ) {
-      generateNewQuotesIfNeeded(category);
-    }
+    refillIfLow();
   }, [availableQuotes?.length, quoteCount, mode, category]);
+
+  useEffect(() => {
+    return () => {
+      if (refillTimer.current) clearTimeout(refillTimer.current);
+      // Reset too, or StrictMode's simulated remount leaves the scheduler
+      // believing a retry is already pending.
+      refillTimer.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     getMistakes?.mistakes && setMistakesMode(getMistakes.mistakes);
   }, [getMistakes?.mistakes]);
 
-  // When database quotes become available, select a fresh quote from the DB
+  // Pick the opening quote exactly once, and only after the pool has loaded.
+  //
+  // Previously a random built-in quote was shown while the Convex query was in
+  // flight, then replaced (and the race remounted) when the real pool arrived
+  // about a second later, wiping anything already typed. Now the race area
+  // shows a loading state instead, and a built-in quote is used only when the
+  // pool turns out to be empty. Once chosen, the quote is never swapped from
+  // underneath the user; later pool changes only affect the *next* draw.
   useEffect(() => {
     if (mode === "words") return;
+    if (availableQuotes === undefined) return; // still loading
+    if (hasSelectedInitialDbQuote.current && sentance) return;
 
-    if (availableQuotes && availableQuotes.length > 0) {
-      if (!hasSelectedInitialDbQuote.current || !sentance) {
-        hasSelectedInitialDbQuote.current = true;
-        generateNewSentence(category, availableQuotes);
-      }
-    } else if (!sentance) {
-      // Temporary initial quote while fetching
-      const fallback = getFallbackQuote(category);
-      setSentance(fallback);
+    hasSelectedInitialDbQuote.current = true;
+    if (availableQuotes.length > 0) {
+      generateNewSentence(category, availableQuotes);
+    } else {
+      setSentance(getFallbackQuote(category));
       setCurrentQuoteId(null);
     }
   }, [availableQuotes, mode, category]);
+
+  const quoteReady = mode !== "quote" || sentance.length > 0;
+
+  // A new quote on screen is a new candidate for saving.
+  useEffect(() => {
+    setSavedOverride(null);
+  }, [sentance]);
+
+  // Once the server agrees with the optimistic state, drop the override so
+  // changes made elsewhere (the results screen, another tab) show through.
+  useEffect(() => {
+    if (savedOverride !== null && savedOverride === savedOnServer) {
+      setSavedOverride(null);
+    }
+  }, [savedOnServer, savedOverride]);
 
   return (
     <div className="app-container">
@@ -255,19 +474,13 @@ function App() {
               <div className="mode-group">
                 <button
                   className={`mode-chip ${mode === "quote" ? "is-active" : ""}`}
-                  onClick={() => {
-                    setMode("quote");
-                    handleFocusClick();
-                  }}
+                  onClick={() => handleModeChange("quote")}
                 >
                   quotes
                 </button>
                 <button
                   className={`mode-chip ${mode === "words" ? "is-active" : ""}`}
-                  onClick={() => {
-                    setMode("words");
-                    handleFocusClick();
-                  }}
+                  onClick={() => handleModeChange("words")}
                 >
                   words
                 </button>
@@ -294,16 +507,11 @@ function App() {
 
               <div className="mode-group">
                 <button
-                  className="mode-chip"
+                  className="mode-chip mode-chip-icon"
                   title="Get a new quote or word set"
                   onClick={() => {
                     generateNewSentence(category);
                     handleFocusClick();
-                  }}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.4rem",
                   }}
                 >
                   <svg
@@ -324,23 +532,58 @@ function App() {
                   </svg>
                   <span>new {mode}</span>
                 </button>
+                {mode === "quote" && (
+                  <button
+                    className={`mode-chip mode-chip-icon ${quoteAlreadySaved ? "is-active" : ""}`}
+                    onClick={handleToggleSaveQuote}
+                    disabled={!isAuthenticated || !quoteReady}
+                    aria-pressed={quoteAlreadySaved}
+                    title={
+                      !isAuthenticated
+                        ? "Sign in to save quotes"
+                        : quoteAlreadySaved
+                          ? "Saved. Click to remove from your quotes"
+                          : "Save this quote to your list"
+                    }
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill={quoteAlreadySaved ? "currentColor" : "none"}
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+                    </svg>
+                    <span>{quoteAlreadySaved ? "saved" : "save quote"}</span>
+                  </button>
+                )}
               </div>
             </div>
 
-            <Game
-              // Remounting is how a race resets: every counter, the keystroke
-              // log and the results screen all start clean.
-              key={`${mode}-${raceId}`}
-              onFinish={handleGameFinish}
-              mistakesMode={currentMistakesMode}
-              SENTENCES={sentance}
-              onReset={() => generateNewSentence(category)}
-              forwardedRef={inputRef}
-              currentQuoteId={currentQuoteId}
-              mode={mode}
-              canSaveQuote={mode === "quote"}
-            />
-            {mode === "quote" && (
+            {quoteReady ? (
+              <Game
+                // Remounting is how a race resets: every counter, the keystroke
+                // log and the results screen all start clean.
+                key={`${mode}-${raceId}`}
+                onFinish={handleGameFinish}
+                mistakesMode={currentMistakesMode}
+                SENTENCES={sentance}
+                onReset={() => generateNewSentence(category)}
+                forwardedRef={inputRef}
+                mode={mode}
+                canSaveQuote={mode === "quote"}
+              />
+            ) : (
+              <div className="typing-area quote-loading" aria-busy="true">
+                Loading a {category === "architecture" ? "programming architecture" : category} quote...
+              </div>
+            )}
+            {mode === "quote" && quoteReady && (
               <AiChatbox SENTENCES={sentance} category={category} />
             )}
           </div>

@@ -15,7 +15,6 @@ const ParticleBackground = ({ onClick, isLoading }) => {
     let animationFrameId;
     let particles = [];
     let mouse = { x: null, y: null };
-    let gravityEnabled = true;
 
     const resizeCanvas = () => {
       if (containerRef.current) {

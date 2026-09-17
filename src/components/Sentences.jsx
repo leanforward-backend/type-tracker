@@ -209,6 +209,18 @@ export const SENTENCES = [
 
 export const CATEGORY_BACKUPS = {
   coding: SENTENCES,
+  architecture: [
+    "A bounded context draws a line around one consistent model and vocabulary, so two teams can both have a Customer without fighting over what the word means.",
+    "Idempotent endpoints let a client safely retry a failed request, which turns a flaky network from a data corruption risk into a simple retry loop.",
+    "Splitting a monolith into services trades in-process calls for network calls, so every boundary you draw should be one you would happily pay latency to cross.",
+    "An architecture decision record captures the options considered and the reasons for the choice, so the next engineer inherits the reasoning rather than just the result.",
+    "Event-driven systems decouple producers from consumers in time and ownership, at the price of harder debugging when a message is lost or handled twice.",
+    "A circuit breaker stops calling a failing dependency for a cooling-off period, so one slow service cannot exhaust every thread in the callers upstream of it.",
+    "Feature flags separate deploying code from releasing behaviour, which lets a team ship daily while turning risky changes on for a small slice of users first.",
+    "Backward compatible schema changes add columns and never rename them, so old and new versions of a service can run side by side during a rolling deploy.",
+    "The strangler fig pattern grows a replacement system around the legacy one, routing traffic across piece by piece until the old system can be switched off.",
+    "Observability means being able to ask new questions of a running system from its logs, metrics and traces, without shipping new code to answer them.",
+  ],
   math: [
     "Euler's identity e^(i*pi) + 1 = 0 connects five fundamental mathematical constants in a single elegant equation.",
     "Prime numbers are integers greater than one that have no positive divisors other than one and themselves.",

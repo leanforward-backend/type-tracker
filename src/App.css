@@ -194,3 +194,38 @@
     @apply bg-background text-foreground;
   }
 }
+
+
+/* Placeholder shown in the race area while the quote pool is still loading. */
+.quote-loading {
+  opacity: 0.55;
+  font-style: italic;
+  min-height: 4.5rem;
+  display: flex;
+  align-items: center;
+}
+
+.mode-chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Chips that pair a small icon with a label ("new quote", "save quote"). */
+.mode-chip-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+/* KaTeX output inside the AI response. The response container uses
+   white-space: pre-wrap, which would otherwise widen the gaps inside formulas. */
+.chat-messages-container .katex {
+  white-space: normal;
+  font-size: 1.05em;
+}
+.chat-messages-container .katex-display {
+  margin: 0.75rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}

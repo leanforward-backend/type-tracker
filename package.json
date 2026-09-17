@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@clerk/clerk-react": "^5.56.1",
+    "@clerk/ui": "^1.33.1",
     "@google/genai": "^1.30.0",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-dialog": "^1.1.15",
@@ -24,11 +25,14 @@
     "cmdk": "^1.1.1",
     "convex": "^1.29.3",
     "date-fns": "^4.1.0",
+    "katex": "^0.18.7",
     "lucide-react": "^0.554.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-markdown": "^10.1.0",
     "react-syntax-highlighter": "^16.1.0",
+    "rehype-katex": "^7.0.1",
+    "remark-math": "^6.0.0",
     "tailwind-merge": "^3.4.0",
     "tailwindcss": "^4.1.17"
   },

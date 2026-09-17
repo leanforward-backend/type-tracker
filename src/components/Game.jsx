@@ -32,7 +32,6 @@ export default function Game({
   SENTENCES,
   onReset,
   forwardedRef,
-  currentQuoteId,
   mode = "quote",
   canSaveQuote = true,
 }) {
@@ -70,7 +69,6 @@ export default function Game({
   }, [isFinished]);
 
   const saveQuote = useMutation(api.storedQuotes.saveQuote);
-  const deleteQuote = useMutation(api.raceQuotes.deleteQuote);
 
   const handleSaveQuote = () => {
     saveQuote({ quote: SENTENCES });
@@ -89,15 +87,6 @@ export default function Game({
     const interval = setInterval(() => setNow(nowMs()), 200);
     return () => clearInterval(interval);
   }, [startTime, isFinished]);
-
-  const removeQuote = async () => {
-    if (!currentQuoteId) return;
-    try {
-      await deleteQuote({ quoteId: currentQuoteId });
-    } catch (error) {
-      console.error("Failed to delete quote:", error);
-    }
-  };
 
   const wordAt = (charIndex) => {
     const words = text.split(" ");
@@ -228,9 +217,11 @@ export default function Game({
       ? 100
       : Math.round((counts.correct / counts.typed) * 100);
 
-  const handleRestart = async () => {
+  const handleRestart = () => {
     setSaved(false);
-    await removeQuote();
+    // App owns retiring the used quote now, so every path that draws a new
+    // one (this button, the "new quote" chip, category switches) retires the
+    // old one exactly once.
     onReset();
   };
 

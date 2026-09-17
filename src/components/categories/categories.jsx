@@ -22,6 +22,7 @@ export const Categories = ({ value = "coding", onChange }) => {
 
   const categories = [
     { name: "Coding", value: "coding" },
+    { name: "Programming Architecture", value: "architecture" },
     { name: "Math", value: "math" },
     { name: "Science", value: "science" },
     { name: "History", value: "history" },

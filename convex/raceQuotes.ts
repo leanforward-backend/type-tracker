@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { dedupeQuotes } from "./quoteSimilarity";
 
 export const getAvailableQuotes = query({
   args: {
@@ -62,13 +63,29 @@ export const saveQuotesBatch = mutation({
     category: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    for (const quote of args.quotes) {
+    // The generator overlaps with what is already stored more than you'd
+    // expect, and "the same fact reworded" is as bad for a typing pool as an
+    // exact copy. dedupeQuotes rejects both exact and near duplicates (see
+    // quoteSimilarity.ts), against the pool and within the batch itself.
+    const existing = args.category
+      ? await ctx.db
+          .query("raceQuotes")
+          .withIndex("by_category", (q) => q.eq("category", args.category))
+          .collect()
+      : await ctx.db.query("raceQuotes").collect();
+
+    const fresh = dedupeQuotes(
+      args.quotes,
+      existing.map((q) => q.quote)
+    );
+
+    for (const quote of fresh) {
       await ctx.db.insert("raceQuotes", {
-        quote: quote,
+        quote,
         category: args.category,
       });
     }
-    return args.quotes.length;
+    return fresh.length;
   },
 });
 

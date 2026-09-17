@@ -9,6 +9,7 @@
  */
 
 import type * as mistakes from "../mistakes.js";
+import type * as quoteSimilarity from "../quoteSimilarity.js";
 import type * as raceQuotes from "../raceQuotes.js";
 import type * as races from "../races.js";
 import type * as storedQuotes from "../storedQuotes.js";
@@ -21,6 +22,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   mistakes: typeof mistakes;
+  quoteSimilarity: typeof quoteSimilarity;
   raceQuotes: typeof raceQuotes;
   races: typeof races;
   storedQuotes: typeof storedQuotes;
