@@ -43,6 +43,60 @@ export function buildTimeline(keystrokes, durationMs) {
   });
 }
 
+/**
+ * Chart series: speed measured over a trailing window, sampled every half
+ * second. The per-second buckets above are too coarse to read as a line — one
+ * extra keystroke in a second swings the value by 12 WPM — so the chart uses
+ * this instead. Each sample is the rate over the previous `windowMs` (or the
+ * whole race so far, when less than that has elapsed), which tracks the pace
+ * the typist actually felt without the bucket noise.
+ */
+export function buildSeries(
+  keystrokes,
+  durationMs,
+  { stepMs = 500, windowMs = 3000, firstSampleMs = 1000 } = {}
+) {
+  const times = [];
+  for (let t = firstSampleMs; t < durationMs; t += stepMs) times.push(t);
+  // Always end on the finish line. Merge it into the last regular sample when
+  // the two would sit nearly on top of each other.
+  if (times.length && durationMs - times[times.length - 1] < stepMs / 2) {
+    times[times.length - 1] = durationMs;
+  } else {
+    times.push(durationMs);
+  }
+
+  let prevT = 0;
+  return times.map((t) => {
+    const window = Math.max(1, Math.min(windowMs, t));
+    const windowStart = t - window;
+    const minutes = window / 60000;
+
+    let raw = 0;
+    let correct = 0;
+    let errors = 0;
+    for (const k of keystrokes) {
+      if (k.t > t) break;
+      // The first keypress starts the clock and consumed no measured time, so
+      // a keystroke sitting exactly on the window's open edge is excluded.
+      if (k.t > windowStart) {
+        raw += 1;
+        if (k.correct) correct += 1;
+      }
+      if (k.t > prevT && !k.correct) errors += 1;
+    }
+    prevT = t;
+
+    return {
+      t,
+      second: Math.round(t / 100) / 10,
+      raw: Math.round(raw / CHARS_PER_WORD / minutes),
+      wpm: Math.round(correct / CHARS_PER_WORD / minutes),
+      errors,
+    };
+  });
+}
+
 /** Maps every character position in the text to the index of the word it belongs to. */
 function wordIndexByChar(text) {
   const map = new Array(text.length);
@@ -162,6 +216,7 @@ export function buildRaceStats({
       ? Math.round(burstValues.reduce((a, b) => a + b, 0) / burstValues.length)
       : 0,
     timeline,
+    series: buildSeries(keystrokes, safeDuration),
     bursts,
     errors,
     missedWords,

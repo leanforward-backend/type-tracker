@@ -53,62 +53,70 @@ function buildSmoothPath(points) {
   return path;
 }
 
-export default function PerformanceChart({ timeline }) {
+/**
+ * `series` is the rolling-window speed from buildSeries: points carry `t` (ms
+ * from race start) and are plotted by time, so the x axis is the race clock
+ * regardless of how many samples there are. `avgWpm` is the race's overall
+ * WPM, drawn as the reference line.
+ */
+export default function PerformanceChart({ series = [], avgWpm = 0 }) {
   const [hovered, setHovered] = useState(null);
 
-  const { yMax, avgWpm, ticks, wpmPath, rawPath, xFor, yFor } = useMemo(() => {
-    const peak = timeline.reduce(
-      (max, point) => Math.max(max, point.raw, point.wpm),
-      0
-    );
-    const max = niceCeiling(peak);
-    const count = timeline.length;
+  const { yMax, ticks, xLabels, wpmPath, rawPath, xFor, yFor } =
+    useMemo(() => {
+      const peak = series.reduce(
+        (max, point) => Math.max(max, point.raw, point.wpm),
+        avgWpm
+      );
+      const max = niceCeiling(peak);
+      const durationMs = series.length ? series[series.length - 1].t : 1;
 
-    const x = (i) =>
-      count <= 1
-        ? (PLOT_L + PLOT_R) / 2
-        : PLOT_L + (i / (count - 1)) * (PLOT_R - PLOT_L);
-    const y = (value) => PLOT_B - (value / max) * (PLOT_B - PLOT_T);
+      const x = (t) => PLOT_L + (t / durationMs) * (PLOT_R - PLOT_L);
+      const y = (value) => PLOT_B - (value / max) * (PLOT_B - PLOT_T);
 
-    const toSmoothPath = (key) => {
-      const coords = timeline.map((point, i) => ({
-        x: x(i),
-        y: y(point[key]),
-      }));
-      return buildSmoothPath(coords);
-    };
+      const toSmoothPath = (key) =>
+        buildSmoothPath(
+          series.map((point) => ({ x: x(point.t), y: y(point[key]) }))
+        );
 
-    const totalWpm = timeline.reduce((acc, point) => acc + point.wpm, 0);
-    const avg = count > 0 ? Math.round(totalWpm / count) : 0;
+      // Whole-second labels, about six across the axis so they never collide.
+      const totalSeconds = durationMs / 1000;
+      const labelStep = Math.max(1, Math.ceil(totalSeconds / 6));
+      const labels = [];
+      for (let sec = 0; sec <= totalSeconds; sec += labelStep) labels.push(sec);
 
-    return {
-      yMax: max,
-      avgWpm: avg,
-      ticks: [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(max * f)),
-      wpmPath: toSmoothPath("wpm"),
-      rawPath: toSmoothPath("raw"),
-      xFor: x,
-      yFor: y,
-    };
-  }, [timeline]);
+      return {
+        yMax: max,
+        ticks: [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(max * f)),
+        xLabels: labels,
+        wpmPath: toSmoothPath("wpm"),
+        rawPath: toSmoothPath("raw"),
+        xFor: x,
+        yFor: y,
+      };
+    }, [series, avgWpm]);
 
-  // Label roughly six seconds along the axis rather than every one, so the
-  // labels never collide on a long race.
-  const xLabelStep = Math.max(1, Math.ceil(timeline.length / 6));
-  const errorPoints = timeline.filter((point) => point.errors > 0);
+  const errorPoints = series.filter((point) => point.errors > 0);
 
   const handleMove = (event) => {
+    if (!series.length) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const ratio = (event.clientX - rect.left) / rect.width;
     const svgX = ratio * VIEW_W;
-    const span = PLOT_R - PLOT_L;
-    const index = Math.round(
-      ((svgX - PLOT_L) / span) * Math.max(1, timeline.length - 1)
-    );
-    setHovered(Math.max(0, Math.min(timeline.length - 1, index)));
+    const durationMs = series[series.length - 1].t;
+    const t = ((svgX - PLOT_L) / (PLOT_R - PLOT_L)) * durationMs;
+
+    let nearest = 0;
+    for (let i = 1; i < series.length; i++) {
+      if (Math.abs(series[i].t - t) < Math.abs(series[nearest].t - t)) {
+        nearest = i;
+      }
+    }
+    setHovered(nearest);
   };
 
-  const hoveredPoint = hovered === null ? null : timeline[hovered];
+  const hoveredPoint = hovered === null ? null : series[hovered];
+  const hoveredX = hoveredPoint ? xFor(hoveredPoint.t) : 0;
 
   return (
     <div className="chart-block">
@@ -211,19 +219,17 @@ export default function PerformanceChart({ timeline }) {
           </g>
         )}
 
-        {timeline.map((point, i) =>
-          i % xLabelStep === 0 || i === timeline.length - 1 ? (
-            <text
-              key={point.second}
-              x={xFor(i)}
-              y={PLOT_B + 20}
-              textAnchor="middle"
-              className="chart-axis-text"
-            >
-              {point.second}s
-            </text>
-          ) : null
-        )}
+        {xLabels.map((sec) => (
+          <text
+            key={sec}
+            x={xFor(sec * 1000)}
+            y={PLOT_B + 20}
+            textAnchor="middle"
+            className="chart-axis-text"
+          >
+            {sec}s
+          </text>
+        ))}
 
         <path
           d={rawPath}
@@ -243,10 +249,10 @@ export default function PerformanceChart({ timeline }) {
         />
 
         {errorPoints.map((point) => {
-          const cx = xFor(point.second - 1);
+          const cx = xFor(point.t);
           const cy = yFor(point.wpm);
           return (
-            <g key={`err-${point.second}`}>
+            <g key={`err-${point.t}`}>
               {/* Surface-coloured ring so the marker stays legible where it sits on a line */}
               <circle r="6" cx={cx} cy={cy} fill={SURFACE} />
               <path
@@ -260,11 +266,11 @@ export default function PerformanceChart({ timeline }) {
         })}
 
         {/* Direct labels at the line ends, so identity never depends on the legend alone */}
-        {timeline.length > 0 && (
+        {series.length > 0 && (
           <>
             <text
               x={PLOT_R + 8}
-              y={yFor(timeline[timeline.length - 1].wpm) + 4}
+              y={yFor(series[series.length - 1].wpm) + 4}
               className="chart-series-label"
               fill={COLOR_WPM}
             >
@@ -272,7 +278,7 @@ export default function PerformanceChart({ timeline }) {
             </text>
             <text
               x={PLOT_R + 8}
-              y={yFor(timeline[timeline.length - 1].raw) + 4}
+              y={yFor(series[series.length - 1].raw) + 4}
               className="chart-series-label"
               fill={COLOR_RAW}
             >
@@ -284,15 +290,15 @@ export default function PerformanceChart({ timeline }) {
         {hoveredPoint && (
           <g pointerEvents="none">
             <line
-              x1={xFor(hovered)}
-              x2={xFor(hovered)}
+              x1={hoveredX}
+              x2={hoveredX}
               y1={PLOT_T}
               y2={PLOT_B}
               stroke="var(--text-muted)"
               strokeWidth="1"
             />
             <circle
-              cx={xFor(hovered)}
+              cx={hoveredX}
               cy={yFor(hoveredPoint.raw)}
               r="4"
               fill={COLOR_RAW}
@@ -300,7 +306,7 @@ export default function PerformanceChart({ timeline }) {
               strokeWidth="2"
             />
             <circle
-              cx={xFor(hovered)}
+              cx={hoveredX}
               cy={yFor(hoveredPoint.wpm)}
               r="4"
               fill={COLOR_WPM}
@@ -309,7 +315,7 @@ export default function PerformanceChart({ timeline }) {
             />
             <g
               transform={`translate(${Math.min(
-                xFor(hovered) + 12,
+                hoveredX + 12,
                 PLOT_R - 118
               )}, ${PLOT_T + 6})`}
             >
@@ -347,8 +353,8 @@ export default function PerformanceChart({ timeline }) {
               </tr>
             </thead>
             <tbody>
-              {timeline.map((point) => (
-                <tr key={point.second}>
+              {series.map((point) => (
+                <tr key={point.t}>
                   <td>{point.second}</td>
                   <td>{point.wpm}</td>
                   <td>{point.raw}</td>

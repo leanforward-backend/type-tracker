@@ -40,7 +40,7 @@ export default function RaceResults({
         </div>
       </div>
 
-      <PerformanceChart timeline={stats.timeline} />
+      <PerformanceChart series={stats.series} avgWpm={stats.wpm} />
 
       <div className="results-tiles">
         <Tile
