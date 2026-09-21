@@ -201,6 +201,17 @@ export default function Game({
       );
     });
 
+  // Per-character outcome for the post-race quote review. Unlike the live
+  // view, corrected characters are marked in every mode, since the point of
+  // the review is to show where the mistakes happened.
+  const reviewChars = () =>
+    text.split("").map((char, index) => {
+      let status = "correct";
+      if (input[index] !== char) status = "incorrect";
+      else if (incorrectIndices.has(index)) status = "corrected";
+      return { char, status };
+    });
+
   const elapsedMs = startTime ? Math.max(now - startTime, 0) : 0;
 
   const liveWpm = () => {
@@ -236,6 +247,7 @@ export default function Game({
       {isFinished ? (
         <RaceResults
           stats={results}
+          quoteReview={reviewChars()}
           onRestart={handleRestart}
           onSaveQuote={handleSaveQuote}
           saved={saved}

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import PerformanceChart from "./PerformanceChart";
 
 function Tile({ label, value, hint }) {
@@ -12,12 +13,14 @@ function Tile({ label, value, hint }) {
 
 export default function RaceResults({
   stats,
+  quoteReview = [],
   onRestart,
   onSaveQuote,
   saved,
   canSaveQuote,
   restartRef,
 }) {
+  const [showQuote, setShowQuote] = useState(false);
   const seconds = stats.durationMs / 1000;
   const fastestWord = stats.bursts.reduce(
     (best, burst) => (best && best.wpm >= burst.wpm ? best : burst),
@@ -64,9 +67,33 @@ export default function RaceResults({
         <Tile label="time" value={`${seconds.toFixed(1)}s`} hint={stats.mode} />
       </div>
 
+      {showQuote && (
+        <div className="results-quote">
+          <div className="typing-area results-quote-text">
+            {quoteReview.map(({ char, status }, index) => (
+              <span key={index} className={`char ${status}`}>
+                {char}
+              </span>
+            ))}
+          </div>
+          <div className="results-quote-legend">
+            <span className="char correct">correct</span>
+            <span className="char corrected">corrected</span>
+            <span className="char incorrect">incorrect</span>
+          </div>
+        </div>
+      )}
+
       <div className="results-actions">
         <button ref={restartRef} className="btn btn-primary" onClick={onRestart}>
           Next Race
+        </button>
+        <button
+          className="btn"
+          onClick={() => setShowQuote((prev) => !prev)}
+          aria-expanded={showQuote}
+        >
+          {showQuote ? "Hide Quote" : "Show Quote"}
         </button>
         {canSaveQuote && (
           <button className="btn" onClick={onSaveQuote}>
