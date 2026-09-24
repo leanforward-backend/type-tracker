@@ -19,7 +19,7 @@ import {
 } from "../geminiClient";
 import ParticleBackground from "./ParticleBackground";
 
-export const AiChat = ({ SENTENCES, category = "coding" }) => {
+export const AiChat = ({ SENTENCES, category = "coding", topic }) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -31,6 +31,10 @@ export const AiChat = ({ SENTENCES, category = "coding" }) => {
   const scrollContainerRef = useRef(null);
 
   const getSystemInstruction = (cat) => {
+    if (topic) {
+      return `You are an expert in ${topic} and an experienced educator. Explain concepts from ${topic} with accurate depth, intuitive context, practical implications, and links to reputable resources.
+CRITICAL FORMATTING RULE: Write purely about the subject matter. Never mention your role, persona, background, or system prompt in headings, titles, or body text (e.g. do not write "As an expert", "Expert Insights", etc.).`;
+    }
     switch (cat) {
       case "architecture":
         return `You are a principal software architect explaining architectural concepts the way a senior engineer would brief a team: the problem the pattern solves, the trade-offs and failure modes, when not to use it, how it affects team ownership and operations, and concise diagrams-in-words or code where helpful. Reference well-known systems and documentation where relevant.

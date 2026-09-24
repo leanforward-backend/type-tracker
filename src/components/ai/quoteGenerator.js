@@ -317,22 +317,54 @@ ${exampleText}
   }
 }
 
-export async function generateQuotesBatch(category = "coding", count = 10, avoid = []) {
+/**
+ * Prompt config for a topic the user typed in. There is no curated subtopic
+ * list, so the model is asked to spread the batch itself, and the quality-bar
+ * examples are borrowed from the built-in categories to show the level of
+ * specificity rather than the subject.
+ */
+function customTopicConfig(topic) {
+  return {
+    domain: topic,
+    requirements: `Cover ${topic} broadly: its core concepts, mechanisms, key figures, history, notable results, and common misconceptions. Stay strictly on ${topic}; if the topic is narrow, go deeper rather than drifting to neighbouring subjects.`,
+    examples: [
+      ...CATEGORY_PROMPT_CONFIG.coding.examples,
+      ...CATEGORY_PROMPT_CONFIG.architecture.examples,
+    ],
+  };
+}
+
+export async function generateQuotesBatch(
+  category = "coding",
+  count = 10,
+  avoid = [],
+  { topic } = {}
+) {
   const targetCount = Math.min(Math.max(count, 1), 20);
-  const categoryKey = CATEGORY_PROMPT_CONFIG[category] ? category : "coding";
-  const configData = CATEGORY_PROMPT_CONFIG[categoryKey];
-  console.log(`Generating batch of ${targetCount} new quotes for category '${categoryKey}'...`);
+  const categoryKey = topic ? category : CATEGORY_PROMPT_CONFIG[category] ? category : "coding";
+  const configData = topic ? customTopicConfig(topic) : CATEGORY_PROMPT_CONFIG[categoryKey];
+  console.log(
+    `Generating batch of ${targetCount} new quotes for category '${topic ?? categoryKey}'...`
+  );
 
   await waitForRateLimit();
 
   // Steer each batch toward different subtopics and angles. Without this the
   // same prompt at the same temperature keeps producing the model's favourite
   // handful of facts, which the dedupe then discards, leaving the pool static.
-  const subtopics = sample(CATEGORY_SUBTOPICS[categoryKey], Math.min(targetCount, 8));
+  const subtopicBlock = topic
+    ? `Pick ${Math.min(targetCount, 8)} clearly different subtopics within ${topic} and spread the facts across them, no more than two facts per subtopic.`
+    : `Spread the facts across these subtopics, at least one fact each and no more than two per subtopic:
+${sample(CATEGORY_SUBTOPICS[categoryKey], Math.min(targetCount, 8))
+  .map((s) => `- ${s}`)
+  .join("\n")}`;
   const angles = sample(STYLE_ANGLES, 4);
   // A few examples show the target level of specificity. They are also fed
   // to the dedupe below so the model cannot satisfy the request by echoing them.
   const examples = sample(configData.examples, 3);
+  const examplesHeading = topic
+    ? "Quality bar. These are from other subjects; match their level of specificity for your topic:"
+    : "Quality bar. Match this level of specificity, but do not reuse these facts or their phrasing:";
 
   // Naming what's already stored is what actually forces new material. Send
   // the most recent entries; the similarity filter below catches the rest.
@@ -348,13 +380,12 @@ export async function generateQuotesBatch(category = "coding", count = 10, avoid
 
 Focus: ${configData.requirements}
 
-Spread the facts across these subtopics, at least one fact each and no more than two per subtopic:
-${subtopics.map((s) => `- ${s}`).join("\n")}
+${subtopicBlock}
 
 Mix these angles across the batch:
 ${angles.map((a) => `- ${a}`).join("\n")}
 
-Quality bar. Match this level of specificity, but do not reuse these facts or their phrasing:
+${examplesHeading}
 ${examples.map((e) => `- ${e}`).join("\n")}
 
 Length: 70 to 220 characters each. Every fact must be about a clearly different specific thing from every other fact in the batch.

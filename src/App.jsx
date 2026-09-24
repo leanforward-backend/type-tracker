@@ -4,6 +4,7 @@ import { api } from "../convex/_generated/api";
 import "./App.css";
 import { AiChatbox } from "./components/ai/aiChatbox";
 import { generateQuotesBatch } from "./components/ai/quoteGenerator";
+import { BUILT_IN_CATEGORIES } from "./components/categories/builtInCategories";
 import { Categories } from "./components/categories/categories";
 import Game from "./components/Game";
 import { getFallbackBatch, getFallbackQuote, SENTENCES } from "./components/Sentences";
@@ -52,6 +53,24 @@ function App() {
   const saveQuotesBatch = useMutation(api.raceQuotes.saveQuotesBatch);
   const deleteQuote = useMutation(api.raceQuotes.deleteQuote);
 
+  // Topics the signed-in user created. Their pools are keyed `custom:<id>`,
+  // and have no built-in backups, so an empty pool shows the loading state
+  // instead of an off-topic fallback quote.
+  const customCategories = useQuery(api.customCategories.getCustomCategories);
+  const createCustomCategory = useMutation(api.customCategories.createCustomCategory);
+  const deleteCustomCategory = useMutation(api.customCategories.deleteCustomCategory);
+  const isCustomCategory = (key) => key.startsWith("custom:");
+  const topicFor = (key, list = customCategories) =>
+    list?.find((c) => c.value === key)?.name;
+  const customTopic = isCustomCategory(category) ? topicFor(category) : undefined;
+  const categoryLabel =
+    customTopic ??
+    (category === "architecture"
+      ? "programming architecture"
+      : BUILT_IN_CATEGORIES.find((c) => c.value === category)?.name.toLowerCase() ?? category);
+  // The custom category whose last generation attempt failed, for the loading message.
+  const [failedCategory, setFailedCategory] = useState(null);
+
   // Saving the on-screen quote to the user's list, available before the race
   // starts (the results screen has its own button for afterwards). The stored
   // list is only queried when signed in, because the query throws otherwise.
@@ -80,7 +99,7 @@ function App() {
     });
     handleFocusClick();
   };
-  latest.current = { category, mode, availableQuotes, quoteCount };
+  latest.current = { category, mode, availableQuotes, quoteCount, customCategories };
 
   const retireQuote = (quoteId) => {
     if (!quoteId) return;
@@ -180,6 +199,12 @@ function App() {
     targetCategory = category,
     { minCount = 0, reason = "" } = {}
   ) => {
+    const custom = isCustomCategory(targetCategory);
+    const topic = custom ? topicFor(targetCategory, latest.current.customCategories) : undefined;
+    // The category list hasn't loaded yet (or the category was just deleted).
+    // The pool monitor re-runs once the topic is known.
+    if (custom && !topic) return;
+
     const now = Date.now();
     const lastAttempt = lastGenerationTime.current[targetCategory] || 0;
     const sinceLast = now - lastAttempt;
@@ -206,7 +231,7 @@ function App() {
         `Generating ${wanted} new AI quotes for '${targetCategory}'${reason ? ` (${reason})` : ""}...`
       );
       const existing = (latest.current.availableQuotes || []).map((q) => q.quote);
-      const newQuotes = await generateQuotesBatch(targetCategory, wanted, existing);
+      const newQuotes = await generateQuotesBatch(targetCategory, wanted, existing, { topic });
       if (newQuotes.length > 0) {
         // saveQuotesBatch returns how many actually landed -- it drops any that
         // duplicate what's already stored, so this is often lower than the
@@ -219,11 +244,18 @@ function App() {
         console.log(
           `Generated ${newQuotes.length} AI quotes for '${targetCategory}', saved ${inserted} new (${newQuotes.length - inserted} were duplicates)`
         );
+        setFailedCategory((c) => (c === targetCategory ? null : c));
       } else {
         throw new Error("No quotes returned from AI generator");
       }
     } catch (error) {
       console.error(`Failed to generate new quotes for '${targetCategory}':`, error);
+      // Built-in backups are off-topic for a custom category; the safety-net
+      // retry below keeps trying instead.
+      if (custom) {
+        setFailedCategory(targetCategory);
+        return;
+      }
       // AI generation is unavailable (usually daily quota), so keep the pool
       // stocked from the built-in backups. There's deliberately no
       // once-per-session guard: quotes are consumed as they're shown, so the
@@ -275,8 +307,7 @@ function App() {
 
       const pool = unseen.length > 0 ? unseen : candidates;
       if (pool.length === 0) {
-        setSentance(getFallbackQuote(targetCategory));
-        setCurrentQuoteId(null);
+        showFallback(targetCategory);
         return;
       }
 
@@ -287,9 +318,31 @@ function App() {
       return;
     }
 
-    const fallback = getFallbackQuote(targetCategory);
-    setSentance(fallback);
+    showFallback(targetCategory);
+  };
+
+  /**
+   * A built-in quote when the pool has nothing to offer. Custom categories have
+   * no built-ins, so they clear the text instead; the loading state shows and
+   * the opening-quote effect picks from the pool once the refill lands.
+   */
+  const showFallback = (targetCategory) => {
+    if (isCustomCategory(targetCategory)) {
+      hasSelectedInitialDbQuote.current = false;
+      setSentance("");
+    } else {
+      setSentance(getFallbackQuote(targetCategory));
+    }
     setCurrentQuoteId(null);
+  };
+
+  const handleCreateCategory = (name) => createCustomCategory({ name });
+
+  const handleDeleteCategory = (key) => {
+    if (key === category) handleCategoryChange("coding");
+    deleteCustomCategory({ value: key }).catch((err) =>
+      console.error("Failed to delete category:", err)
+    );
   };
 
   const handleCategoryChange = (newCategory) => {
@@ -357,10 +410,20 @@ function App() {
     });
   }, [availableQuotes, mode, category]);
 
-  // Monitor quote pool: if empty or low, proactively trigger AI quote generation
+  // Monitor quote pool: if empty or low, proactively trigger AI quote generation.
+  // customTopic is a dependency because a custom pool can't be filled until
+  // the category list has loaded.
   useEffect(() => {
     refillIfLow();
-  }, [availableQuotes?.length, quoteCount, mode, category]);
+  }, [availableQuotes?.length, quoteCount, mode, category, customTopic]);
+
+  // A custom category that no longer exists (deleted in another tab, or the
+  // user signed out) has nothing to draw from.
+  useEffect(() => {
+    if (isCustomCategory(category) && customCategories !== undefined && !customTopic) {
+      handleCategoryChange("coding");
+    }
+  }, [category, customCategories, customTopic]);
 
   useEffect(() => {
     return () => {
@@ -387,6 +450,9 @@ function App() {
     if (mode === "words") return;
     if (availableQuotes === undefined) return; // still loading
     if (hasSelectedInitialDbQuote.current && sentance) return;
+
+    // A new custom category starts empty; wait for its first batch.
+    if (availableQuotes.length === 0 && isCustomCategory(category)) return;
 
     hasSelectedInitialDbQuote.current = true;
     if (availableQuotes.length > 0) {
@@ -448,6 +514,10 @@ function App() {
           <Categories
             value={category}
             onChange={handleCategoryChange}
+            customCategories={customCategories ?? []}
+            canCreate={isAuthenticated}
+            onCreate={handleCreateCategory}
+            onDelete={handleDeleteCategory}
           />
         </div>
 
@@ -580,11 +650,13 @@ function App() {
               />
             ) : (
               <div className="typing-area quote-loading" aria-busy="true">
-                Loading a {category === "architecture" ? "programming architecture" : category} quote...
+                {failedCategory === category
+                  ? `Couldn't generate ${categoryLabel} quotes yet. Retrying...`
+                  : `Loading a ${categoryLabel} quote...`}
               </div>
             )}
             {mode === "quote" && quoteReady && (
-              <AiChatbox SENTENCES={sentance} category={category} />
+              <AiChatbox SENTENCES={sentance} category={category} topic={customTopic} />
             )}
           </div>
         ) : (

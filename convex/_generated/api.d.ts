@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as customCategories from "../customCategories.js";
 import type * as mistakes from "../mistakes.js";
 import type * as quoteSimilarity from "../quoteSimilarity.js";
 import type * as raceQuotes from "../raceQuotes.js";
@@ -21,6 +22,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  customCategories: typeof customCategories;
   mistakes: typeof mistakes;
   quoteSimilarity: typeof quoteSimilarity;
   raceQuotes: typeof raceQuotes;

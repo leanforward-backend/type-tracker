@@ -22,4 +22,10 @@ export default defineSchema({
     quote: v.string(),
     category: v.optional(v.string()),
   }).index("by_category", ["category"]),
+  // Topics a user typed in themselves. Their quotes live in raceQuotes under
+  // the category key `custom:<_id>`, so each user's topic has its own pool.
+  customCategories: defineTable({
+    userId: v.string(),
+    name: v.string(),
+  }).index("by_user_id", ["userId"]),
 });
