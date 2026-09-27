@@ -1,14 +1,12 @@
 import {
   ClerkProvider,
   SignInButton,
+  SignedIn,
+  SignedOut,
   useAuth,
   UserButton,
 } from "@clerk/clerk-react";
-import {
-  Authenticated,
-  ConvexReactClient,
-  Unauthenticated,
-} from "convex/react";
+import { ConvexReactClient } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { shadcn } from "@clerk/ui/themes";
 import { StrictMode } from "react";
@@ -37,14 +35,14 @@ createRoot(document.getElementById("root")).render(
             justifyContent: "flex-end",
           }}
         >
-          <Unauthenticated>
+          <SignedOut>
             <SignInButton mode="modal">
               <button className="btn">Sign In</button>
             </SignInButton>
-          </Unauthenticated>
-          <Authenticated>
+          </SignedOut>
+          <SignedIn>
             <UserButton />
-          </Authenticated>
+          </SignedIn>
         </div>
         <App />
       </ConvexProviderWithClerk>
