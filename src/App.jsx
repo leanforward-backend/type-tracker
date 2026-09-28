@@ -664,6 +664,7 @@ function App() {
             history={displayHistory}
             problemKeys={getProblemKeys()}
             problemWords={getProblemWords()}
+            storedQuotes={storedQuotes}
           />
         )}
       </main>

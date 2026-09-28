@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import { format } from "date-fns";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
@@ -13,10 +13,14 @@ import { Button } from "./ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Table, TableBody, TableCell, TableRow } from "./ui/table";
 
-export default function Stats({ history, problemKeys, problemWords }) {
+export default function Stats({
+  history,
+  problemKeys,
+  problemWords,
+  storedQuotes,
+}) {
   // Every hook has to run before the empty-history early return below, or React
   // sees a different hook count on the first race and throws.
-  const storedQuotes = useQuery(api.storedQuotes.getStoredQuotes);
   const deleteRace = useMutation(api.races.deleteRace);
 
   const [historyPage, setHistoryPage] = useState(1);
