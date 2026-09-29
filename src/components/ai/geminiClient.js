@@ -312,6 +312,15 @@ export function parseApiError(err) {
     }
   }
 
+  // An error Gemini sends inside a 200 stream is raw JSON, not an SSE event.
+  // The SDK only recognises it when the whole body lands in one network read;
+  // split across reads, it throws one of these instead and the real status is
+  // lost. It is almost always a 503/429 from an overloaded model, so treat it
+  // as a transient upstream failure (502) and rotate like any other.
+  if (!code && /Incomplete JSON segment|exception parsing stream chunk/i.test(raw)) {
+    code = 502;
+  }
+
   let quotaScope = "";
   if (code === 429) {
     if (/per\s*day|daily|PerDay/i.test(message)) quotaScope = "day";
