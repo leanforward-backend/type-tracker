@@ -45,9 +45,11 @@ export function useTypeTracker() {
       .catch((err) => console.error("Error saving session:", err));
   };
 
-  const getProblemKeys = () => {
+  // Both take the sessions to aggregate, so a signed-in user's stats come from
+  // their Convex history rather than this tab's in-memory list.
+  const getProblemKeys = (sessions = history) => {
     const keyCounts = {};
-    history.forEach((session) => {
+    sessions.forEach((session) => {
       if (session.errors) {
         Object.entries(session.errors).forEach(([key, count]) => {
           keyCounts[key] = (keyCounts[key] || 0) + count;
@@ -60,9 +62,9 @@ export function useTypeTracker() {
       .slice(0, 50); // Top 50 problem keys
   };
 
-  const getProblemWords = () => {
+  const getProblemWords = (sessions = history) => {
     const wordCounts = {};
-    history.forEach((session) => {
+    sessions.forEach((session) => {
       if (session.missedWords) {
         session.missedWords.forEach((word) => {
           wordCounts[word] = (wordCounts[word] || 0) + 1;

@@ -1,3 +1,4 @@
+import { useAuth } from "@clerk/clerk-react";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../convex/_generated/api";
@@ -24,7 +25,11 @@ function App() {
   const [mistakesMode, setMistakesMode] = useState(false);
   const { history, saveSession, getProblemKeys, getProblemWords } =
     useTypeTracker();
-  const { isAuthenticated } = useConvexAuth();
+  const { isAuthenticated, isLoading: convexAuthLoading } = useConvexAuth();
+  // The header shows Clerk's state, but saves need Convex to accept the Clerk
+  // token. When the two disagree, races are silently dropped, so say so.
+  const { isSignedIn } = useAuth();
+  const convexRejectedSession = isSignedIn && !convexAuthLoading && !isAuthenticated;
 
   const inputRef = useRef(null);
 
@@ -132,6 +137,12 @@ function App() {
         errors: stats.errors,
         missedWords: stats.missedWords,
       }).catch((err) => console.error("Failed to save race:", err));
+    } else {
+      console.warn(
+        convexRejectedSession
+          ? "Race not saved: signed in to Clerk, but Convex rejected the session token."
+          : "Race not saved: not signed in."
+      );
     }
   };
 
@@ -537,6 +548,17 @@ function App() {
         </nav>
       </header>
 
+      {convexRejectedSession && (
+        <div
+          role="alert"
+          style={{ margin: "0 1rem 1rem", color: "var(--color-error)" }}
+        >
+          You're signed in, but the database rejected your session, so races
+          aren't being saved. Check that convex/auth.config.ts matches the Clerk
+          instance in VITE_CLERK_PUBLISHABLE_KEY.
+        </div>
+      )}
+
       <main>
         {view === "game" ? (
           <div>
@@ -662,8 +684,8 @@ function App() {
         ) : (
           <Stats
             history={displayHistory}
-            problemKeys={getProblemKeys()}
-            problemWords={getProblemWords()}
+            problemKeys={getProblemKeys(displayHistory)}
+            problemWords={getProblemWords(displayHistory)}
             storedQuotes={storedQuotes}
           />
         )}
