@@ -9,6 +9,7 @@
  */
 
 import type * as customCategories from "../customCategories.js";
+import type * as http from "../http.js";
 import type * as mistakes from "../mistakes.js";
 import type * as quoteSimilarity from "../quoteSimilarity.js";
 import type * as raceQuotes from "../raceQuotes.js";
@@ -23,6 +24,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   customCategories: typeof customCategories;
+  http: typeof http;
   mistakes: typeof mistakes;
   quoteSimilarity: typeof quoteSimilarity;
   raceQuotes: typeof raceQuotes;

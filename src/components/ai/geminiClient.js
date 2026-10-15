@@ -4,7 +4,47 @@ import { GoogleGenAI } from "@google/genai";
 // in plain Node (scripts, tests) without a bundler in front of it.
 const env = import.meta.env ?? {};
 
-export const ai = new GoogleGenAI({ apiKey: env.VITE_GEMINI_API_KEY });
+// Every request goes through the Convex HTTP action in convex/http.ts, which
+// checks the Clerk session and adds the Gemini key server-side. The key must
+// never be a VITE_ variable: Vite inlines those into the public bundle.
+const PROXY_URL = env.VITE_CONVEX_URL
+  ? `${env.VITE_CONVEX_URL.replace(/\.convex\.cloud\/?$/, ".convex.site")}/gemini`
+  : undefined;
+
+/**
+ * Returns a Clerk JWT for the "convex" template, or null when signed out.
+ * Set by App via `setAuthTokenGetter`, since the token lives in React context.
+ */
+let getAuthToken = async () => null;
+
+export function setAuthTokenGetter(fn) {
+  getAuthToken = fn;
+}
+
+function signInRequiredError() {
+  const err = new Error("Sign in to use the AI features.");
+  err.code = 401;
+  err.signInRequired = true;
+  return err;
+}
+
+// The browser SDK refuses to start without an apiKey; the proxy ignores it.
+export const ai = new GoogleGenAI({
+  apiKey: "proxied",
+  httpOptions: PROXY_URL ? { baseUrl: PROXY_URL } : undefined,
+});
+
+// The SDK has no public hook for per-request auth. Its WebAuth object is asked
+// for headers before every request (generate, stream, list), so swap it for one
+// that sends the Clerk session instead of an API key. Checked against
+// @google/genai 1.30; if an upgrade renames these, every request will 401.
+ai.apiClient.clientOptions.auth = {
+  async addAuthHeaders(headers) {
+    const token = await getAuthToken();
+    if (!token) throw signInRequiredError();
+    headers.set("Authorization", `Bearer ${token}`);
+  },
+};
 
 // Only consulted when ListModels itself fails (offline, key rejected, API
 // outage). Discovery is the real source of truth so this list going stale is
@@ -419,7 +459,9 @@ async function discoverModels() {
       if (discovered.length === 0) discoveryFailed = true;
     } catch (err) {
       discoveryFailed = true;
-      console.warn("[geminiClient] Error discovering models from API:", err?.message || err);
+      if (!err?.signInRequired) {
+        console.warn("[geminiClient] Error discovering models from API:", err?.message || err);
+      }
     }
 
     for (const def of DEFAULT_MODELS) {
@@ -654,6 +696,14 @@ export async function withModelFallback(fn, options = {}) {
           lastError = err;
           const info = parseApiError(err);
           if (info.retryDelayMs) lastRetryDelayMs = info.retryDelayMs;
+
+          // 401 only comes from our proxy (no session, or Convex rejected the
+          // token). It says nothing about the model, so don't park it for a
+          // day, and no other model will do better.
+          if (info.code === 401) {
+            err.signInRequired = true;
+            throw err;
+          }
 
           console.warn(
             `[${label}] '${model}' failed (${info.code || (info.isNetwork ? "network" : "?")} ${info.status || info.message || ""})`,

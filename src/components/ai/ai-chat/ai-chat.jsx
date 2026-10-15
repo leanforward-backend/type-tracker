@@ -169,6 +169,9 @@ CRITICAL FORMATTING RULE: Write purely about the code and technology. Never ment
 
   const errorMessageFor = (error) => {
     const { code, quotaScope, isNetwork } = parseApiError(error);
+    if (error?.signInRequired || code === 401) {
+      return "Sign in to use the AI chat.";
+    }
     if (isNetwork) {
       return "Couldn't reach Gemini. Check your internet connection and try again.";
     }
@@ -188,7 +191,7 @@ CRITICAL FORMATTING RULE: Write purely about the code and technology. Never ment
     if (code === 404 && error.allModelsExhausted) {
       return "None of the configured Gemini models are available to this API key. Check the model list in Google AI Studio.";
     }
-    if (code === 403 || code === 401 || code === 400) {
+    if (code === 403 || code === 400) {
       return "The API rejected the request. Please check your API key and model settings.";
     }
     return "Error generating content. Please try again.";

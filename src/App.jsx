@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../convex/_generated/api";
 import "./App.css";
 import { AiChatbox } from "./components/ai/aiChatbox";
+import { setAuthTokenGetter } from "./components/ai/geminiClient";
 import { generateQuotesBatch } from "./components/ai/quoteGenerator";
 import { BUILT_IN_CATEGORIES } from "./components/categories/builtInCategories";
 import { Categories } from "./components/categories/categories";
@@ -28,8 +29,13 @@ function App() {
   const { isAuthenticated, isLoading: convexAuthLoading } = useConvexAuth();
   // The header shows Clerk's state, but saves need Convex to accept the Clerk
   // token. When the two disagree, races are silently dropped, so say so.
-  const { isSignedIn } = useAuth();
+  const { isSignedIn, getToken } = useAuth();
   const convexRejectedSession = isSignedIn && !convexAuthLoading && !isAuthenticated;
+
+  // The Gemini proxy (convex/http.ts) checks the same Clerk token Convex uses.
+  useEffect(() => {
+    setAuthTokenGetter(() => getToken({ template: "convex" }));
+  }, [getToken]);
 
   const inputRef = useRef(null);
 
@@ -104,7 +110,7 @@ function App() {
     });
     handleFocusClick();
   };
-  latest.current = { category, mode, availableQuotes, quoteCount, customCategories };
+  latest.current = { category, mode, availableQuotes, quoteCount, customCategories, isAuthenticated };
 
   const retireQuote = (quoteId) => {
     if (!quoteId) return;
@@ -241,6 +247,11 @@ function App() {
       console.log(
         `Generating ${wanted} new AI quotes for '${targetCategory}'${reason ? ` (${reason})` : ""}...`
       );
+      // AI generation is for signed-in users only; signed-out visitors go
+      // straight to the built-in backups below.
+      if (!latest.current.isAuthenticated) {
+        throw new Error("Signed out, skipping AI quote generation");
+      }
       const existing = (latest.current.availableQuotes || []).map((q) => q.quote);
       const newQuotes = await generateQuotesBatch(targetCategory, wanted, existing, { topic });
       if (newQuotes.length > 0) {
@@ -413,13 +424,16 @@ function App() {
   // healthy.
   useEffect(() => {
     if (mode !== "quote" || availableQuotes === undefined) return;
+    // Wait for the session, or a signed-in user's first batch is skipped as
+    // signed out.
+    if (convexAuthLoading) return;
     if (hasKickedOffInitialBatch.current) return;
     hasKickedOffInitialBatch.current = true;
     generateNewQuotesIfNeeded(category, {
       minCount: INITIAL_BATCH_SIZE,
       reason: "fresh batch on page load",
     });
-  }, [availableQuotes, mode, category]);
+  }, [availableQuotes, mode, category, convexAuthLoading]);
 
   // Monitor quote pool: if empty or low, proactively trigger AI quote generation.
   // customTopic is a dependency because a custom pool can't be filled until
