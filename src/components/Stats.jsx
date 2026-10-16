@@ -12,12 +12,15 @@ import {
 import { Button } from "./ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Table, TableBody, TableCell, TableRow } from "./ui/table";
+import { UpgradeButton } from "./upgrade/Upgrade";
 
 export default function Stats({
   history,
   problemKeys,
   problemWords,
   storedQuotes,
+  // Set for free accounts: the server only returns this many recent races.
+  historyLimit = null,
 }) {
   // Every hook has to run before the empty-history early return below, or React
   // sees a different hook count on the first race and throws.
@@ -62,8 +65,20 @@ export default function Stats({
     quotesPage * ITEMS_PER_PAGE
   );
 
+  // A full page of races on a free account means there may be older ones the
+  // server held back.
+  const truncated = historyLimit !== null && history.length >= historyLimit;
+
   return (
     <div className="container" style={{ padding: 0 }}>
+      {truncated && (
+        <p style={{ color: "var(--text-secondary)", marginTop: 0 }}>
+          Showing your last {historyLimit} races. Your older races are still
+          saved;{" "}
+          <UpgradeButton className="underline cursor-pointer">upgrade</UpgradeButton>{" "}
+          to see your full history.
+        </p>
+      )}
       <div className="stats-grid">
         <div className="stat-box">
           <div className="stat-value">{averageWpm}</div>
@@ -75,7 +90,9 @@ export default function Stats({
         </div>
         <div className="stat-box">
           <div className="stat-value">{history.length}</div>
-          <div className="stat-label">Games Played</div>
+          <div className="stat-label">
+            {truncated ? `Last ${historyLimit} Games` : "Games Played"}
+          </div>
         </div>
       </div>
 

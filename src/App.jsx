@@ -12,6 +12,7 @@ import Game from "./components/Game";
 import { getFallbackBatch, getFallbackQuote, SENTENCES } from "./components/Sentences";
 import Stats from "./components/Stats";
 import { Toggle } from "./components/ui/toggle";
+import { UpgradeButton } from "./components/upgrade/Upgrade";
 import { generateWords, WORD_COUNTS } from "./components/words";
 import { useTypeTracker } from "./hooks/useTypeTracker";
 
@@ -31,6 +32,20 @@ function App() {
   // token. When the two disagree, races are silently dropped, so say so.
   const { isSignedIn, getToken } = useAuth();
   const convexRejectedSession = isSignedIn && !convexAuthLoading && !isAuthenticated;
+  // What this account has paid for (convex/entitlements.ts); null when signed out.
+  const me = useQuery(api.entitlements.me);
+
+  // Stripe Checkout sends the user back with ?checkout=success|cancelled.
+  // The webhook may land a moment later; `me` updates itself when it does.
+  const [checkoutResult] = useState(() =>
+    new URLSearchParams(window.location.search).get("checkout")
+  );
+  useEffect(() => {
+    if (!checkoutResult) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("checkout");
+    window.history.replaceState(null, "", url);
+  }, [checkoutResult]);
 
   // The Gemini proxy (convex/http.ts) checks the same Clerk token Convex uses.
   useEffect(() => {
@@ -540,13 +555,19 @@ function App() {
             value={category}
             onChange={handleCategoryChange}
             customCategories={customCategories ?? []}
-            canCreate={isAuthenticated}
+            canCreate={Boolean(me?.customTopics)}
+            signedIn={isAuthenticated}
             onCreate={handleCreateCategory}
             onDelete={handleDeleteCategory}
           />
         </div>
 
         <nav style={{ display: "flex", gap: "1rem" }}>
+          {me && (
+            <UpgradeButton className={`btn ${me.tier === "free" ? "btn-primary" : ""}`}>
+              {me.tier === "free" ? "Upgrade" : "Plan"}
+            </UpgradeButton>
+          )}
           <button
             className={`btn ${view === "game" ? "btn-primary" : ""}`}
             onClick={() => setView("game")}
@@ -570,6 +591,14 @@ function App() {
           You're signed in, but the database rejected your session, so races
           aren't being saved. Check that convex/auth.config.ts matches the Clerk
           instance in VITE_CLERK_PUBLISHABLE_KEY.
+        </div>
+      )}
+
+      {checkoutResult === "success" && (
+        <div role="status" style={{ margin: "0 1rem 1rem", color: "var(--color-success)" }}>
+          {me && me.tier !== "free"
+            ? "Thanks! Your plan is active."
+            : "Thanks! Payment received. Your plan will switch on in a few seconds."}
         </div>
       )}
 
@@ -701,6 +730,7 @@ function App() {
             problemKeys={getProblemKeys(displayHistory)}
             problemWords={getProblemWords(displayHistory)}
             storedQuotes={storedQuotes}
+            historyLimit={isAuthenticated ? me?.historyLimit : null}
           />
         )}
       </main>

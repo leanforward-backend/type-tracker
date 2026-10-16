@@ -127,6 +127,7 @@ const STATUS_CODES = {
   NOT_FOUND: 404,
   PERMISSION_DENIED: 403,
   UNAUTHENTICATED: 401,
+  AI_LIMIT: 402, // our proxy, convex/http.ts
   INVALID_ARGUMENT: 400,
   FAILED_PRECONDITION: 400,
   DEADLINE_EXCEEDED: 504,
@@ -702,6 +703,12 @@ export async function withModelFallback(fn, options = {}) {
           // day, and no other model will do better.
           if (info.code === 401) {
             err.signInRequired = true;
+            throw err;
+          }
+          // 402 is our proxy saying the account's AI uses (or today's quote
+          // refills) are spent. Same story: not the model's fault, no retry.
+          if (info.code === 402) {
+            err.aiLimit = true;
             throw err;
           }
 

@@ -1,6 +1,40 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query, type MutationCtx } from "./_generated/server";
 import { dedupeQuotes } from "./quoteSimilarity";
+
+// Keep in step with src/components/categories/builtInCategories.js.
+const BUILT_IN_CATEGORIES = new Set([
+  "coding",
+  "architecture",
+  "math",
+  "science",
+  "history",
+  "geography",
+  "art",
+  "music",
+]);
+const MAX_BATCH = 25;
+const MIN_QUOTE_LENGTH = 20;
+const MAX_QUOTE_LENGTH = 500;
+
+/**
+ * Shared pools take writes from any signed-in user (they are restocked and
+ * turned over by whoever is playing); a custom pool only from its owner.
+ */
+async function assertCanWrite(ctx: MutationCtx, category: string | undefined) {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) throw new Error("Sign in to change the quote pool");
+  if (!category) throw new Error("A category is required");
+  if (category.startsWith("custom:")) {
+    const id = ctx.db.normalizeId("customCategories", category.slice("custom:".length));
+    const row = id && (await ctx.db.get(id));
+    if (!row || row.userId !== identity.subject) {
+      throw new Error("Not your category");
+    }
+  } else if (!BUILT_IN_CATEGORIES.has(category)) {
+    throw new Error(`Unknown category: ${category}`);
+  }
+}
 
 export const getAvailableQuotes = query({
   args: {
@@ -63,6 +97,14 @@ export const saveQuotesBatch = mutation({
     category: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await assertCanWrite(ctx, args.category);
+    if (args.quotes.length > MAX_BATCH) {
+      throw new Error(`At most ${MAX_BATCH} quotes per batch`);
+    }
+    const candidates = args.quotes.filter(
+      (q) => q.length >= MIN_QUOTE_LENGTH && q.length <= MAX_QUOTE_LENGTH
+    );
+
     // The generator overlaps with what is already stored more than you'd
     // expect, and "the same fact reworded" is as bad for a typing pool as an
     // exact copy. dedupeQuotes rejects both exact and near duplicates (see
@@ -75,7 +117,7 @@ export const saveQuotesBatch = mutation({
       : await ctx.db.query("raceQuotes").collect();
 
     const fresh = dedupeQuotes(
-      args.quotes,
+      candidates,
       existing.map((q) => q.quote)
     );
 
@@ -89,8 +131,9 @@ export const saveQuotesBatch = mutation({
   },
 });
 
-// Rotate quotes: remove oldest quotes in category (or globally), add new ones
-export const rotateQuotes = mutation({
+// Rotate quotes: remove oldest quotes in category (or globally), add new ones.
+// Internal: nothing in the app calls it, and it can empty any pool.
+export const rotateQuotes = internalMutation({
   args: {
     newQuotes: v.array(v.string()),
     category: v.optional(v.string()),
@@ -138,6 +181,9 @@ export const deleteQuote = mutation({
     quoteId: v.id("raceQuotes"),
   },
   handler: async (ctx, args) => {
+    const quote = await ctx.db.get(args.quoteId);
+    if (!quote) return false;
+    await assertCanWrite(ctx, quote.category);
     await ctx.db.delete(args.quoteId);
     return true;
   },
