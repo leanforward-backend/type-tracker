@@ -41,25 +41,41 @@ export type AiKind = "chat" | "quotes";
 const monthKey = (now: number) => new Date(now).toISOString().slice(0, 7);
 const dayKey = (now: number) => new Date(now).toISOString().slice(0, 10);
 
-function compedEmails(): Set<string> {
+/** A comma-separated list of emails from a Convex env var, lowercased. */
+function emailList(name: string): Set<string> {
   return new Set(
-    (process.env.COMPED_EMAILS ?? "")
+    (process.env[name] ?? "")
       .split(",")
       .map((e) => e.trim().toLowerCase())
       .filter(Boolean)
   );
 }
 
+type EmailIdentity = Pick<UserIdentity, "email" | "emailVerified">;
+
+/** The identity's email, lowercased, unless Clerk says it's unverified. */
+function verifiedEmail(identity: EmailIdentity | null): string | null {
+  return identity?.email && identity.emailVerified !== false
+    ? identity.email.toLowerCase()
+    : null;
+}
+
+/**
+ * Admins can switch the AI model for themselves (the picker on the Stats
+ * page). Set with `npx convex env set ADMIN_EMAILS you@example.com`.
+ */
+export function isAdmin(identity: EmailIdentity | null): boolean {
+  const email = verifiedEmail(identity);
+  return email !== null && emailList("ADMIN_EMAILS").has(email);
+}
+
 export function computeEntitlements(
   account: Doc<"accounts"> | null,
-  identity: Pick<UserIdentity, "email" | "emailVerified"> | null,
+  identity: EmailIdentity | null,
   now = Date.now()
 ) {
-  const email =
-    identity?.email && identity.emailVerified !== false
-      ? identity.email.toLowerCase()
-      : null;
-  const comped = Boolean(account?.comped) || (email !== null && compedEmails().has(email));
+  const email = verifiedEmail(identity);
+  const comped = Boolean(account?.comped) || (email !== null && emailList("COMPED_EMAILS").has(email));
   const subscribed =
     account?.subStatus !== undefined &&
     ACTIVE_STATUSES.has(account.subStatus) &&
@@ -96,6 +112,7 @@ export function computeEntitlements(
     quoteRefillsLeft: Math.max(0, DAILY_QUOTE_REFILLS - quotesToday),
     subscribed,
     hasBillingAccount: Boolean(account?.stripeCustomerId),
+    isAdmin: isAdmin(identity),
   };
 }
 

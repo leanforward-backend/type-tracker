@@ -271,6 +271,12 @@ body {
   background: var(--bg-input);
 }
 
+/* The admin AI model picker on the Stats page; native options follow the palette. */
+.ai-model-select option {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
 /* Race results */
 .results {
   text-align: left;

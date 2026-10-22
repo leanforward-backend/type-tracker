@@ -180,8 +180,11 @@ CRITICAL FORMATTING RULE: Write purely about the code and technology. Never ment
     if (error?.aiLimit || code === 402) {
       return message || "You've used all your AI uses. Upgrade to Pro for more.";
     }
+    if (error?.providerError) {
+      return `The AI service isn't available right now (${message}).`;
+    }
     if (isNetwork) {
-      return "Couldn't reach Gemini. Check your internet connection and try again.";
+      return "Couldn't reach the AI service. Check your internet connection and try again.";
     }
     if (code === 429) {
       if (quotaScope === "minute") {

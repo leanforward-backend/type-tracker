@@ -4,7 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../convex/_generated/api";
 import "./App.css";
 import { AiChatbox } from "./components/ai/aiChatbox";
-import { setAuthTokenGetter } from "./components/ai/geminiClient";
+import { AiModelPicker } from "./components/ai/AiModelPicker";
+import {
+  setAiPickAllowed,
+  setAuthTokenGetter,
+  setDefaultAiChoice,
+} from "./components/ai/geminiClient";
 import { generateQuotesBatch } from "./components/ai/quoteGenerator";
 import { BUILT_IN_CATEGORIES } from "./components/categories/builtInCategories";
 import { Categories } from "./components/categories/categories";
@@ -16,8 +21,31 @@ import { UpgradeButton } from "./components/upgrade/Upgrade";
 import { generateWords, WORD_COUNTS } from "./components/words";
 import { useTypeTracker } from "./hooks/useTypeTracker";
 
+const CATEGORY_KEY = "type-tracker:category:v1";
+
+function readSavedCategory() {
+  try {
+    const saved = localStorage.getItem(CATEGORY_KEY);
+    if (saved?.startsWith("custom:") || BUILT_IN_CATEGORIES.some((c) => c.value === saved)) {
+      return saved;
+    }
+  } catch {
+    // Storage may be blocked.
+  }
+  return "coding";
+}
+
 function App() {
-  const [category, setCategory] = useState("coding");
+  // Restored on reload. A custom topic is checked against the user's list
+  // once it loads (see the effect further down).
+  const [category, setCategory] = useState(readSavedCategory);
+  useEffect(() => {
+    try {
+      localStorage.setItem(CATEGORY_KEY, category);
+    } catch {
+      // Storage may be blocked; the category just won't survive a reload.
+    }
+  }, [category]);
   const [sentance, setSentance] = useState("");
   const [currentQuoteId, setCurrentQuoteId] = useState(null); // Track current quote ID
   const [view, setView] = useState("game");
@@ -47,10 +75,24 @@ function App() {
     window.history.replaceState(null, "", url);
   }, [checkoutResult]);
 
-  // The Gemini proxy (convex/http.ts) checks the same Clerk token Convex uses.
+  // The AI proxies (convex/http.ts) check the same Clerk token Convex uses.
   useEffect(() => {
     setAuthTokenGetter(() => getToken({ template: "convex" }));
   }, [getToken]);
+
+  // Which AI models to use: the deployment default (Convex env
+  // AI_DEFAULT_CHOICE), or an admin's own pick from the Stats page. Declared
+  // before the quote effects below, which wait for aiReady so the first batch
+  // on page load already uses the right models.
+  const aiDefaultChoice = useQuery(api.aiConfig.defaultChoice);
+  const isAdmin = Boolean(me?.isAdmin);
+  useEffect(() => {
+    if (aiDefaultChoice) setDefaultAiChoice(aiDefaultChoice);
+  }, [aiDefaultChoice]);
+  useEffect(() => {
+    setAiPickAllowed(isAdmin);
+  }, [isAdmin]);
+  const aiReady = aiDefaultChoice !== undefined && me !== undefined;
 
   const inputRef = useRef(null);
 
@@ -82,7 +124,12 @@ function App() {
   // Topics the signed-in user created. Their pools are keyed `custom:<id>`,
   // and have no built-in backups, so an empty pool shows the loading state
   // instead of an off-topic fallback quote.
-  const customCategories = useQuery(api.customCategories.getCustomCategories);
+  // Skipped until signed in, so the first list that arrives is the user's own
+  // and not a signed-out empty one (which would discard a restored topic).
+  const customCategories = useQuery(
+    api.customCategories.getCustomCategories,
+    isAuthenticated ? {} : "skip"
+  );
   const createCustomCategory = useMutation(api.customCategories.createCustomCategory);
   const deleteCustomCategory = useMutation(api.customCategories.deleteCustomCategory);
   const isCustomCategory = (key) => key.startsWith("custom:");
@@ -91,9 +138,11 @@ function App() {
   const customTopic = isCustomCategory(category) ? topicFor(category) : undefined;
   const categoryLabel =
     customTopic ??
-    (category === "architecture"
-      ? "programming architecture"
-      : BUILT_IN_CATEGORIES.find((c) => c.value === category)?.name.toLowerCase() ?? category);
+    (isCustomCategory(category)
+      ? "custom topic" // its name is still loading
+      : category === "architecture"
+        ? "programming architecture"
+        : BUILT_IN_CATEGORIES.find((c) => c.value === category)?.name.toLowerCase() ?? category);
   // The custom category whose last generation attempt failed, for the loading message.
   const [failedCategory, setFailedCategory] = useState(null);
 
@@ -268,7 +317,12 @@ function App() {
         throw new Error("Signed out, skipping AI quote generation");
       }
       const existing = (latest.current.availableQuotes || []).map((q) => q.quote);
-      const newQuotes = await generateQuotesBatch(targetCategory, wanted, existing, { topic });
+      const { quotes: newQuotes, model } = await generateQuotesBatch(
+        targetCategory,
+        wanted,
+        existing,
+        { topic }
+      );
       if (newQuotes.length > 0) {
         // saveQuotesBatch returns how many actually landed -- it drops any that
         // duplicate what's already stored, so this is often lower than the
@@ -277,9 +331,10 @@ function App() {
         const inserted = await saveQuotesBatch({
           quotes: newQuotes,
           category: targetCategory,
+          model,
         });
         console.log(
-          `Generated ${newQuotes.length} AI quotes for '${targetCategory}', saved ${inserted} new (${newQuotes.length - inserted} were duplicates)`
+          `Generated ${newQuotes.length} AI quotes for '${targetCategory}' with ${model}, saved ${inserted} new (${newQuotes.length - inserted} were duplicates)`
         );
         setFailedCategory((c) => (c === targetCategory ? null : c));
       } else {
@@ -302,6 +357,7 @@ function App() {
       await saveQuotesBatch({
         quotes: fallbackBatch,
         category: targetCategory,
+        model: "built-in",
       }).catch(() => {});
     } finally {
       isGeneratingQuotes.current = false;
@@ -442,28 +498,38 @@ function App() {
     // Wait for the session, or a signed-in user's first batch is skipped as
     // signed out.
     if (convexAuthLoading) return;
+    // And for the AI model choice, or the first batch goes to Gemini regardless.
+    if (!aiReady) return;
+    // A custom topic restored on reload needs its name for the prompt, which
+    // arrives after sign-in. Without it the request is dropped, so don't spend
+    // the once-per-load batch until it's known.
+    if (isCustomCategory(category) && !customTopic) return;
     if (hasKickedOffInitialBatch.current) return;
     hasKickedOffInitialBatch.current = true;
     generateNewQuotesIfNeeded(category, {
       minCount: INITIAL_BATCH_SIZE,
       reason: "fresh batch on page load",
     });
-  }, [availableQuotes, mode, category, convexAuthLoading]);
+  }, [availableQuotes, mode, category, convexAuthLoading, aiReady, customTopic]);
 
   // Monitor quote pool: if empty or low, proactively trigger AI quote generation.
   // customTopic is a dependency because a custom pool can't be filled until
-  // the category list has loaded.
+  // the category list has loaded, and aiReady because nothing should be
+  // generated before the AI model choice is known.
   useEffect(() => {
+    if (!aiReady) return;
     refillIfLow();
-  }, [availableQuotes?.length, quoteCount, mode, category, customTopic]);
+  }, [availableQuotes?.length, quoteCount, mode, category, customTopic, aiReady]);
 
   // A custom category that no longer exists (deleted in another tab, or the
-  // user signed out) has nothing to draw from.
+  // user signed out) has nothing to draw from. Wait for the session first, so
+  // a custom topic restored on reload isn't thrown away before the user's
+  // list has loaded.
   useEffect(() => {
-    if (isCustomCategory(category) && customCategories !== undefined && !customTopic) {
-      handleCategoryChange("coding");
-    }
-  }, [category, customCategories, customTopic]);
+    if (!isCustomCategory(category) || convexAuthLoading) return;
+    const gone = !isAuthenticated || (customCategories !== undefined && !customTopic);
+    if (gone) handleCategoryChange("coding");
+  }, [category, customCategories, customTopic, convexAuthLoading, isAuthenticated]);
 
   useEffect(() => {
     return () => {
@@ -731,6 +797,11 @@ function App() {
             problemWords={getProblemWords(displayHistory)}
             storedQuotes={storedQuotes}
             historyLimit={isAuthenticated ? me?.historyLimit : null}
+            adminPanel={
+              isAuthenticated && isAdmin ? (
+                <AiModelPicker defaultChoiceId={aiDefaultChoice} />
+              ) : null
+            }
           />
         )}
       </main>

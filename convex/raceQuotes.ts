@@ -16,6 +16,7 @@ const BUILT_IN_CATEGORIES = new Set([
 const MAX_BATCH = 25;
 const MIN_QUOTE_LENGTH = 20;
 const MAX_QUOTE_LENGTH = 500;
+const MAX_MODEL_LENGTH = 100;
 
 /**
  * Shared pools take writes from any signed-in user (they are restocked and
@@ -95,12 +96,14 @@ export const saveQuotesBatch = mutation({
   args: {
     quotes: v.array(v.string()),
     category: v.optional(v.string()),
+    model: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await assertCanWrite(ctx, args.category);
     if (args.quotes.length > MAX_BATCH) {
       throw new Error(`At most ${MAX_BATCH} quotes per batch`);
     }
+    const model = args.model?.trim().slice(0, MAX_MODEL_LENGTH) || undefined;
     const candidates = args.quotes.filter(
       (q) => q.length >= MIN_QUOTE_LENGTH && q.length <= MAX_QUOTE_LENGTH
     );
@@ -125,6 +128,7 @@ export const saveQuotesBatch = mutation({
       await ctx.db.insert("raceQuotes", {
         quote,
         category: args.category,
+        model,
       });
     }
     return fresh.length;

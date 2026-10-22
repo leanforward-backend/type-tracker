@@ -21,6 +21,8 @@ export default function Stats({
   storedQuotes,
   // Set for free accounts: the server only returns this many recent races.
   historyLimit = null,
+  // Admin-only settings (the AI model picker), shown above the stats.
+  adminPanel = null,
 }) {
   // Every hook has to run before the empty-history early return below, or React
   // sees a different hook count on the first race and throws.
@@ -32,14 +34,17 @@ export default function Stats({
 
   if (history.length === 0) {
     return (
-      <div className="card">
-        <h2 className="title" style={{ fontSize: "2rem" }}>
-          Statistics
-        </h2>
-        <p style={{ color: "var(--text-secondary)" }}>
-          No games played yet. Start typing to track your progress!
-        </p>
-      </div>
+      <>
+        {adminPanel}
+        <div className="card">
+          <h2 className="title" style={{ fontSize: "2rem" }}>
+            Statistics
+          </h2>
+          <p style={{ color: "var(--text-secondary)" }}>
+            No games played yet. Start typing to track your progress!
+          </p>
+        </div>
+      </>
     );
   }
 
@@ -71,6 +76,7 @@ export default function Stats({
 
   return (
     <div className="container" style={{ padding: 0 }}>
+      {adminPanel}
       {truncated && (
         <p style={{ color: "var(--text-secondary)", marginTop: 0 }}>
           Showing your last {historyLimit} races. Your older races are still

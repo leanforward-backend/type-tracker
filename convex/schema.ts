@@ -21,6 +21,10 @@ export default defineSchema({
   raceQuotes: defineTable({
     quote: v.string(),
     category: v.optional(v.string()),
+    // The AI model that wrote it ("gemini-3.6-flash", "z-ai/glm-5.3-flash"),
+    // or "built-in" for the backup quotes. Reported by the client; missing on
+    // quotes saved before it was recorded.
+    model: v.optional(v.string()),
   }).index("by_category", ["category"]),
   // Topics a user typed in themselves. Their quotes live in raceQuotes under
   // the category key `custom:<_id>`, so each user's topic has its own pool.

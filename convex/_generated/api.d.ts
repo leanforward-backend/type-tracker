@@ -8,6 +8,8 @@
  * @module
  */
 
+import type * as aiConfig from "../aiConfig.js";
+import type * as aiModels from "../aiModels.js";
 import type * as billing from "../billing.js";
 import type * as customCategories from "../customCategories.js";
 import type * as entitlements from "../entitlements.js";
@@ -26,6 +28,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  aiConfig: typeof aiConfig;
+  aiModels: typeof aiModels;
   billing: typeof billing;
   customCategories: typeof customCategories;
   entitlements: typeof entitlements;
