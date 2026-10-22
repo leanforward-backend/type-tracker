@@ -1,4 +1,9 @@
+import { SignInButton, useAuth } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
+import { UpgradeButton } from "@/components/upgrade/Upgrade";
+import { aiUsesLabel } from "@/components/upgrade/aiUsesLabel";
+import { useConvexAuth, useQuery } from "convex/react";
+import { api } from "../../../../convex/_generated/api";
 import { Input } from "@/components/ui/input";
 import { RotateCcw, SendHorizontal } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -168,12 +173,18 @@ CRITICAL FORMATTING RULE: Write purely about the code and technology. Never ment
   };
 
   const errorMessageFor = (error) => {
-    const { code, quotaScope, isNetwork } = parseApiError(error);
+    const { code, quotaScope, isNetwork, message } = parseApiError(error);
     if (error?.signInRequired || code === 401) {
       return "Sign in to use the AI chat.";
     }
+    if (error?.aiLimit || code === 402) {
+      return message || "You've used all your AI uses. Upgrade to Pro for more.";
+    }
+    if (error?.providerError) {
+      return `The AI service isn't available right now (${message}).`;
+    }
     if (isNetwork) {
-      return "Couldn't reach Gemini. Check your internet connection and try again.";
+      return "Couldn't reach the AI service. Check your internet connection and try again.";
     }
     if (code === 429) {
       if (quotaScope === "minute") {
@@ -205,6 +216,10 @@ CRITICAL FORMATTING RULE: Write purely about the code and technology. Never ment
     role: "model",
     text: errorMessageFor(error),
     error: true,
+    // Retrying won't help a signed-out user; the bubble offers sign-in instead.
+    signIn: Boolean(error?.signInRequired) || parseApiError(error).code === 401,
+    // Out of AI uses: retrying won't help either, so offer the plans.
+    upgrade: Boolean(error?.aiLimit) || parseApiError(error).code === 402,
     retry,
   });
 
@@ -370,10 +385,31 @@ CRITICAL FORMATTING RULE: Write purely about the code and technology. Never ment
     activeModelRef.current = null;
   }, [SENTENCES, category]);
 
+  // Once signed in, drop the sign-in prompt so the chat can start fresh.
+  const { isSignedIn } = useAuth();
+  const { isAuthenticated } = useConvexAuth();
+  const me = useQuery(api.entitlements.me, isAuthenticated ? {} : "skip");
+  useEffect(() => {
+    if (isSignedIn) setMessages((list) => list.filter((m) => !m.signIn));
+  }, [isSignedIn]);
+
+  const usesLeft = me && (
+    <p className="mt-2 text-center text-sm text-[var(--text-secondary)]">
+      {aiUsesLabel(me)}
+      {me.tier === "free" && (
+        <>
+          {" · "}
+          <UpgradeButton className="underline cursor-pointer">Upgrade</UpgradeButton>
+        </>
+      )}
+    </p>
+  );
+
   if (messages.length === 0) {
     return (
       <div className="w-full">
         <ParticleBackground onClick={startChat} isLoading={isLoading} />
+        {usesLeft}
       </div>
     );
   }
@@ -393,9 +429,23 @@ CRITICAL FORMATTING RULE: Write purely about the code and technology. Never ment
               <div
                 className={`inline-block p-4 rounded-lg ${msg.role === "user" ? "bg-primary text-primary-foreground" : "w-full"}`}
               >
-                {msg.error ? (
+                {msg.error && msg.signIn ? (
                   <div className="text-left flex flex-col items-start gap-3">
-                    <p className="text-muted-foreground">{msg.text}</p>
+                    <p className="text-[var(--text-primary)]">{msg.text}</p>
+                    <SignInButton mode="modal">
+                      <button className="btn">Sign in</button>
+                    </SignInButton>
+                  </div>
+                ) : msg.error && msg.upgrade ? (
+                  <div className="text-left flex flex-col items-start gap-3">
+                    <p className="text-[var(--text-primary)]">{msg.text}</p>
+                    <UpgradeButton className="btn btn-primary">See plans</UpgradeButton>
+                  </div>
+                ) : msg.error ? (
+                  <div className="text-left flex flex-col items-start gap-3">
+                    {/* The shadcn tokens are the light set (no .dark class), so
+                        text-muted-foreground is too dim on this background. */}
+                    <p className="text-[var(--text-primary)]">{msg.text}</p>
                     <Button
                       variant="outline"
                       size="sm"
@@ -496,6 +546,7 @@ CRITICAL FORMATTING RULE: Write purely about the code and technology. Never ment
           <SendHorizontal className="h-4 w-4" />
         </Button>
       </div>
+      {usesLeft}
     </div>
   );
 };

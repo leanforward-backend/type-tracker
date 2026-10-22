@@ -8,13 +8,18 @@
  * @module
  */
 
+import type * as aiConfig from "../aiConfig.js";
+import type * as aiModels from "../aiModels.js";
+import type * as billing from "../billing.js";
 import type * as customCategories from "../customCategories.js";
+import type * as entitlements from "../entitlements.js";
 import type * as http from "../http.js";
 import type * as mistakes from "../mistakes.js";
 import type * as quoteSimilarity from "../quoteSimilarity.js";
 import type * as raceQuotes from "../raceQuotes.js";
 import type * as races from "../races.js";
 import type * as storedQuotes from "../storedQuotes.js";
+import type * as stripe from "../stripe.js";
 
 import type {
   ApiFromModules,
@@ -23,13 +28,18 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  aiConfig: typeof aiConfig;
+  aiModels: typeof aiModels;
+  billing: typeof billing;
   customCategories: typeof customCategories;
+  entitlements: typeof entitlements;
   http: typeof http;
   mistakes: typeof mistakes;
   quoteSimilarity: typeof quoteSimilarity;
   raceQuotes: typeof raceQuotes;
   races: typeof races;
   storedQuotes: typeof storedQuotes;
+  stripe: typeof stripe;
 }>;
 
 /**

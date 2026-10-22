@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { requireFeature } from "./entitlements";
 
 const MAX_NAME_LENGTH = 60;
 const MAX_PER_USER = 30;
@@ -30,6 +31,7 @@ export const createCustomCategory = mutation({
     if (!identity) {
       throw new Error("Sign in to create a category");
     }
+    await requireFeature(ctx, "customTopics");
     const name = args.name.trim().replace(/\s+/g, " ");
     if (name.length < 2 || name.length > MAX_NAME_LENGTH) {
       throw new Error(`Category name must be 2 to ${MAX_NAME_LENGTH} characters`);

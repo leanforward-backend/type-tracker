@@ -2,6 +2,7 @@ import { dedupeQuotes } from "../../../convex/quoteSimilarity";
 import { ai, parseApiError, withModelFallback } from "./geminiClient";
 
 const RATE_LIMIT_PER_MINUTE = 15;
+const BATCH_TIMEOUT_MS = 60_000;
 const MIN_DELAY_MS = Math.ceil((60 * 1000) / RATE_LIMIT_PER_MINUTE);
 
 let lastRequestTime = 0;
@@ -334,6 +335,10 @@ function customTopicConfig(topic) {
   };
 }
 
+/**
+ * @returns {Promise<{ quotes: string[], model: string }>} `model` is the one
+ *   that actually answered after any fallback, for recording on the quotes.
+ */
 export async function generateQuotesBatch(
   category = "coding",
   count = 10,
@@ -392,7 +397,7 @@ Length: 70 to 220 characters each. Every fact must be about a clearly different 
 
 Respond with a raw JSON array of strings only: ["fact 1", "fact 2", ...]${avoidBlock}`;
 
-  const { result } = await withModelFallback(
+  const { result, model: usedModel } = await withModelFallback(
     async (model, { thinkingConfig, abortSignal }) => {
       const response = await ai.models.generateContent({
         model,
@@ -406,7 +411,7 @@ Respond with a raw JSON array of strings only: ["fact 1", "fact 2", ...]${avoidB
         },
       });
 
-      const rawCount = (() => { try { const j = JSON.parse(readText(response).trim()); return Array.isArray(j) ? j.length : 0; } catch { return 0; } })();
+      const rawCount = jsonList(readText(response))?.length ?? 0;
       const parsed = parseQuoteList(readText(response));
       if (rawCount > parsed.length) {
         console.log(`[quoteGenerator] rejected ${rawCount - parsed.length} of ${rawCount} quotes as hard to type or wrong length`);
@@ -425,10 +430,16 @@ Respond with a raw JSON array of strings only: ["fact 1", "fact 2", ...]${avoidB
       }
       return quotes;
     },
-    { label: "quoteGenerator", onAttempt: logAttempt }
+    {
+      label: "quoteGenerator",
+      onAttempt: logAttempt,
+      // A batch isn't streamed, so the whole reply (up to 20 quotes plus the
+      // model's reasoning) has to land inside this, not just the first words.
+      openTimeoutMs: BATCH_TIMEOUT_MS,
+    }
   );
 
-  return result;
+  return { quotes: result, model: usedModel };
 }
 
 /** The SDK has returned `text` as both a string and a getter across versions. */
@@ -439,15 +450,27 @@ function readText(response) {
   return "";
 }
 
+/**
+ * The JSON list in a reply, or null. OpenRouter's JSON mode only allows an
+ * object, so there the list arrives wrapped ({"items": [...]}), and some
+ * models fence it in ```json despite being asked not to.
+ */
+function jsonList(rawText) {
+  const text = rawText.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+  try {
+    const json = JSON.parse(text);
+    if (Array.isArray(json)) return json;
+    if (json && typeof json === "object") return Object.values(json).find(Array.isArray) ?? null;
+  } catch {
+    // Not JSON.
+  }
+  return null;
+}
+
 function parseQuoteList(rawText) {
   const isUsable = (q) => q.length >= 30 && q.length <= 500 && isTypingFriendly(q);
-  try {
-    const json = JSON.parse(rawText.trim());
-    if (Array.isArray(json)) {
-      return json.map(cleanQuote).filter(isUsable);
-    }
-  } catch {
-    // Fall through to line parsing when the model ignored the JSON mime type.
-  }
+  const list = jsonList(rawText);
+  if (list) return list.map(cleanQuote).filter(isUsable);
+  // Fall back to line parsing when the model ignored the JSON instruction.
   return rawText.split("\n").map(cleanQuote).filter(isUsable);
 }

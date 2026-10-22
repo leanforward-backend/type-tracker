@@ -29,6 +29,7 @@ export const Categories = ({
   onChange,
   customCategories = [],
   canCreate = false,
+  signedIn = false,
   onCreate,
   onDelete,
 }) => {
@@ -252,7 +253,9 @@ export const Categories = ({
                   <Plus className="text-[var(--accent-primary)]" />
                   <span className="truncate">
                     {!canCreate
-                      ? "Sign in to create your own"
+                      ? signedIn
+                        ? "Upgrade to create your own"
+                        : "Sign in to create your own"
                       : busy
                         ? "Creating..."
                         : typed.length >= 2

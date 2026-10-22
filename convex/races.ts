@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { accountFor, computeEntitlements } from "./entitlements";
 
 export const saveRace = mutation({
   args: {
@@ -18,17 +19,22 @@ export const saveRace = mutation({
   },
 });
 
+/** Newest first. Free accounts get the most recent FREE_HISTORY_LIMIT races. */
 export const getHistory = query({
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
       return [];
     }
-    return await ctx.db
+    const { historyLimit } = computeEntitlements(
+      await accountFor(ctx, identity.subject),
+      identity
+    );
+    const races = ctx.db
       .query("races")
       .withIndex("by_user_id", (q) => q.eq("userId", identity.subject))
-      .order("desc")
-      .collect();
+      .order("desc");
+    return historyLimit === null ? await races.collect() : await races.take(historyLimit);
   },
 });
 

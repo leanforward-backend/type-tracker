@@ -1,15 +1,19 @@
 import { GoogleGenAI } from "@google/genai";
+import { AI_CHOICES, FALLBACK_AI_CHOICE, findAiChoice } from "../../../convex/aiModels";
+import { createOpenRouterClient } from "./openRouterClient";
 
 // `import.meta.env` only exists under Vite. Guarding it lets this module load
 // in plain Node (scripts, tests) without a bundler in front of it.
 const env = import.meta.env ?? {};
 
-// Every request goes through the Convex HTTP action in convex/http.ts, which
-// checks the Clerk session and adds the Gemini key server-side. The key must
-// never be a VITE_ variable: Vite inlines those into the public bundle.
-const PROXY_URL = env.VITE_CONVEX_URL
-  ? `${env.VITE_CONVEX_URL.replace(/\.convex\.cloud\/?$/, ".convex.site")}/gemini`
+// Every request goes through the Convex HTTP actions in convex/http.ts, which
+// check the Clerk session and add the Gemini or OpenRouter key server-side.
+// Keys must never be VITE_ variables: Vite inlines those into the public bundle.
+const SITE_URL = env.VITE_CONVEX_URL
+  ? env.VITE_CONVEX_URL.replace(/\.convex\.cloud\/?$/, ".convex.site")
   : undefined;
+const PROXY_URL = SITE_URL && `${SITE_URL}/gemini`;
+const OPENROUTER_URL = SITE_URL && `${SITE_URL}/openrouter/chat/completions`;
 
 /**
  * Returns a Clerk JWT for the "convex" template, or null when signed out.
@@ -29,7 +33,7 @@ function signInRequiredError() {
 }
 
 // The browser SDK refuses to start without an apiKey; the proxy ignores it.
-export const ai = new GoogleGenAI({
+const gemini = new GoogleGenAI({
   apiKey: "proxied",
   httpOptions: PROXY_URL ? { baseUrl: PROXY_URL } : undefined,
 });
@@ -38,13 +42,95 @@ export const ai = new GoogleGenAI({
 // for headers before every request (generate, stream, list), so swap it for one
 // that sends the Clerk session instead of an API key. Checked against
 // @google/genai 1.30; if an upgrade renames these, every request will 401.
-ai.apiClient.clientOptions.auth = {
+gemini.apiClient.clientOptions.auth = {
   async addAuthHeaders(headers) {
     const token = await getAuthToken();
     if (!token) throw signInRequiredError();
     headers.set("Authorization", `Bearer ${token}`);
   },
 };
+
+const openRouter = createOpenRouterClient({
+  url: OPENROUTER_URL,
+  async getHeaders() {
+    const token = await getAuthToken();
+    if (!token) throw signInRequiredError();
+    return { Authorization: `Bearer ${token}` };
+  },
+});
+
+// OpenRouter ids are "vendor/model"; Gemini ids never contain a slash.
+const isOpenRouterModel = (model) => typeof model === "string" && model.includes("/");
+const clientFor = (model) => (isOpenRouterModel(model) ? openRouter : gemini);
+
+/**
+ * What the app calls instead of an SDK client. Each call goes to Gemini or
+ * OpenRouter by its model id, so a request already in flight when the user
+ * switches models still reaches the provider it was built for.
+ */
+export const ai = {
+  models: {
+    generateContent: (request) => clientFor(request?.model).models.generateContent(request),
+  },
+  chats: {
+    create: (options) => clientFor(options?.model).chats.create(options),
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Which models to use (the admin-only picker on the Stats page, see
+// AiModelPicker.jsx; everyone else follows the deployment default)
+// ---------------------------------------------------------------------------
+
+const CHOICE_KEY = "type-tracker:ai-choice:v1";
+
+function readPickedChoice() {
+  try {
+    const id = globalThis.localStorage?.getItem(CHOICE_KEY);
+    return findAiChoice(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+// The deployment-wide default (Convex env AI_DEFAULT_CHOICE, via the
+// aiConfig.defaultChoice query) applies until this browser picks its own.
+let defaultChoiceId = FALLBACK_AI_CHOICE;
+let pickedChoiceId = readPickedChoice();
+// A stored pick only counts for an admin (the proxy enforces the same), so a
+// leftover pick from testing on a shared browser can't follow someone else.
+let pickAllowed = false;
+
+export function setDefaultAiChoice(id) {
+  if (findAiChoice(id)) defaultChoiceId = id;
+}
+
+export function setAiPickAllowed(allowed) {
+  pickAllowed = Boolean(allowed);
+}
+
+/** `null` goes back to following the deployment default. */
+export function setAiChoice(id) {
+  pickedChoiceId = findAiChoice(id) ? id : null;
+  try {
+    if (pickedChoiceId) globalThis.localStorage?.setItem(CHOICE_KEY, pickedChoiceId);
+    else globalThis.localStorage?.removeItem(CHOICE_KEY);
+  } catch {
+    // Storage may be blocked; the choice still holds for this page.
+  }
+}
+
+export function getPickedAiChoiceId() {
+  return pickedChoiceId;
+}
+
+export function getAiChoice() {
+  return (
+    (pickAllowed && findAiChoice(pickedChoiceId)) ||
+    findAiChoice(defaultChoiceId) ||
+    AI_CHOICES[0]
+  );
+}
 
 // Only consulted when ListModels itself fails (offline, key rejected, API
 // outage). Discovery is the real source of truth so this list going stale is
@@ -127,6 +213,8 @@ const STATUS_CODES = {
   NOT_FOUND: 404,
   PERMISSION_DENIED: 403,
   UNAUTHENTICATED: 401,
+  AI_LIMIT: 402, // our proxy, convex/http.ts
+  PROVIDER_ERROR: 500, // our proxy: the OpenRouter account itself
   INVALID_ARGUMENT: 400,
   FAILED_PRECONDITION: 400,
   DEADLINE_EXCEEDED: 504,
@@ -216,6 +304,10 @@ export function markModelFailed(modelName, err) {
     else if (quotaScope === "minute") cooldown = COOLDOWN_MS.perMinuteQuota;
     else cooldown = COOLDOWN_MS.unknownQuota;
     cooldown = Math.max(cooldown, retryDelayMs);
+  } else if ((code === 404 || code === 403) && isOpenRouterModel(modelName)) {
+    // OpenRouter's 404 is usually "no provider matches these settings" (data
+    // policy, required parameters), which is fixable, not a retired model.
+    cooldown = COOLDOWN_MS.badRequest;
   } else if (code === 404 || code === 403 || code === 401) {
     cooldown = COOLDOWN_MS.gone;
   } else if (code === 400) {
@@ -428,7 +520,7 @@ async function discoverModels() {
       // the first request when the static defaults would do.
       const listing = (async () => {
         const found = [];
-        for await (const m of await ai.models.list()) {
+        for await (const m of await gemini.models.list()) {
           if (!isEligibleModel(m)) continue;
           const name = m.name.replace(/^models\//, "");
           found.push({ name, version: flashVersion(name) });
@@ -493,8 +585,12 @@ async function discoverModels() {
  *   3. every other model not on cooldown, newest first,
  *   4. models on a *transient* cooldown (503 etc.), soonest-to-expire first.
  * Models on a hard cooldown (429 / 404 / 403 / 400) are left out entirely.
+ *
+ * With `fixedOrder` (an OpenRouter choice) steps 1 and 2 are skipped: the
+ * pool's order is the choice itself, and a model that last worked under a
+ * different choice must not jump ahead of this one's first pick.
  */
-function orderCandidates(pool, preferredModel) {
+function orderCandidates(pool, preferredModel, { fixedOrder = false } = {}) {
   pruneExpired();
   const inPool = new Set(pool);
   const seen = new Set();
@@ -513,8 +609,10 @@ function orderCandidates(pool, preferredModel) {
     else parked.push({ model, until: cd.until });
   };
 
-  consider(preferredModel);
-  consider(state.lastGood);
+  if (!fixedOrder) {
+    consider(preferredModel);
+    consider(state.lastGood);
+  }
   for (const m of pool) consider(m);
 
   parked.sort((a, b) => a.until - b.until);
@@ -650,8 +748,10 @@ export async function withModelFallback(fn, options = {}) {
     label = "geminiClient",
   } = options;
 
-  const pool = explicitModels ?? (await discoverModels());
-  let { candidates, blocked } = orderCandidates(pool, preferredModel);
+  const choice = getAiChoice();
+  const fixedOrder = !explicitModels && choice.provider === "openrouter";
+  const pool = explicitModels ?? (fixedOrder ? choice.models : await discoverModels());
+  let { candidates, blocked } = orderCandidates(pool, preferredModel, { fixedOrder });
 
   if (candidates.length === 0) {
     // Everything is parked for a reason a retry can't fix, almost always daily
@@ -682,7 +782,7 @@ export async function withModelFallback(fn, options = {}) {
         // is abandoned and the next model tried, instead of hanging forever.
         const controller = new AbortController();
         const timer = setTimeout(() => {
-          const reason = new Error(`Gemini request timed out after ${openTimeoutMs}ms`);
+          const reason = new Error(`AI request timed out after ${openTimeoutMs}ms`);
           reason.name = "TimeoutError";
           controller.abort(reason);
         }, openTimeoutMs);
@@ -702,6 +802,18 @@ export async function withModelFallback(fn, options = {}) {
           // day, and no other model will do better.
           if (info.code === 401) {
             err.signInRequired = true;
+            throw err;
+          }
+          // 402 is our proxy saying the account's AI uses (or today's quote
+          // refills) are spent. Same story: not the model's fault, no retry.
+          if (info.code === 402) {
+            err.aiLimit = true;
+            throw err;
+          }
+          // Our OpenRouter account (key missing or rejected, out of credit).
+          // Every OpenRouter model shares it, so rotating can't help.
+          if (info.status === "PROVIDER_ERROR") {
+            err.providerError = true;
             throw err;
           }
 
