@@ -20,8 +20,11 @@ import {
  *   plus PACK_AI_USES credits that never expire.
  *
  * AI is spent monthly allowance first, then pack credits, then free uses.
- * Background quote refills (see http.ts) don't spend credits; they have their
- * own daily cap so the shared quote pools keep filling for everyone.
+ *
+ * Quotes: paying users (and admins) draw from the "paid" pools, use each quote
+ * up, and refill them with AI (see raceQuotes.ts). Those refills don't spend
+ * credits; they have their own daily cap. Everyone else draws from the "free"
+ * pools, which they never use up and never refill.
  */
 export const FREE_AI_USES = 10;
 export const MONTHLY_AI_USES = 300;
@@ -110,6 +113,8 @@ export function computeEntitlements(
     freeLeft,
     aiRemaining: monthlyLeft + packLeft + freeLeft,
     quoteRefillsLeft: Math.max(0, DAILY_QUOTE_REFILLS - quotesToday),
+    // Draws from the paid pools: never sees a repeat, and refills them with AI.
+    freshQuotes: paid || isAdmin(identity),
     subscribed,
     hasBillingAccount: Boolean(account?.stripeCustomerId),
     isAdmin: isAdmin(identity),
@@ -169,7 +174,7 @@ export const canUseAi = internalQuery({
   args: { ...identityArgs, kind: v.union(v.literal("chat"), v.literal("quotes")) },
   handler: async (ctx, { userId, email, emailVerified, kind }) => {
     const ent = computeEntitlements(await accountFor(ctx, userId), { email, emailVerified });
-    return kind === "chat" ? ent.aiRemaining > 0 : ent.quoteRefillsLeft > 0;
+    return kind === "chat" ? ent.aiRemaining > 0 : ent.freshQuotes && ent.quoteRefillsLeft > 0;
   },
 });
 

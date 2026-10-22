@@ -1,5 +1,5 @@
 import { useAuth } from "@clerk/clerk-react";
-import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import { useConvex, useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../convex/_generated/api";
 import "./App.css";
@@ -33,6 +33,29 @@ function readSavedCategory() {
     // Storage may be blocked.
   }
   return "coding";
+}
+
+// Quotes this browser has already been shown. Free pools are never used up,
+// so without this a returning player would start over at every visit.
+const SEEN_KEY = "type-tracker:seen-quotes:v1";
+// Every free pool at its cap (8 × 500), with room to spare.
+const MAX_SEEN = 5000;
+
+function readSeenQuotes() {
+  try {
+    const ids = JSON.parse(localStorage.getItem(SEEN_KEY) ?? "[]");
+    return new Set(Array.isArray(ids) ? ids : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeSeenQuotes(seen) {
+  try {
+    localStorage.setItem(SEEN_KEY, JSON.stringify([...seen].slice(-MAX_SEEN)));
+  } catch {
+    // Storage may be blocked; repeats just come round sooner.
+  }
 }
 
 function App() {
@@ -102,24 +125,18 @@ function App() {
 
   const getMistakes = useQuery(api.mistakes.getMistakes);
 
-  const seenQuoteIds = useRef(new Set());
+  const seenQuoteIds = useRef(null);
+  if (seenQuoteIds.current === null) seenQuoteIds.current = readSeenQuotes();
   const isGeneratingQuotes = useRef(false);
   const lastGenerationTime = useRef({});
   const refillTimer = useRef(null);
   const refillRequested = useRef(false);
-  const hasKickedOffInitialBatch = useRef(false);
   // Latest render values for callbacks that run later (timers, finally
   // blocks), which would otherwise close over stale props.
   const latest = useRef({});
 
-  const availableQuotes = useQuery(api.raceQuotes.getAvailableQuotes, {
-    category,
-  });
-  const quoteCount = useQuery(api.raceQuotes.getQuoteCount, {
-    category,
-  });
   const saveQuotesBatch = useMutation(api.raceQuotes.saveQuotesBatch);
-  const deleteQuote = useMutation(api.raceQuotes.deleteQuote);
+  const retireQuoteMutation = useMutation(api.raceQuotes.retireQuote);
 
   // Topics the signed-in user created. Their pools are keyed `custom:<id>`,
   // and have no built-in backups, so an empty pool shows the loading state
@@ -145,6 +162,48 @@ function App() {
         : BUILT_IN_CATEGORIES.find((c) => c.value === category)?.name.toLowerCase() ?? category);
   // The custom category whose last generation attempt failed, for the loading message.
   const [failedCategory, setFailedCategory] = useState(null);
+
+  // Paying users (and custom topics) draw from the paid pool, use each quote
+  // up and refill it with AI. Everyone else draws from the free pool, which
+  // they never use up (see convex/raceQuotes.ts). Neither pool is loaded until
+  // the session and plan are known, or a paying user's opening quote would
+  // come from the wrong pool.
+  const freshQuotes = Boolean(me?.freshQuotes);
+  const poolKnown = !convexAuthLoading && me !== undefined;
+  const usesPaidPool = freshQuotes || isCustomCategory(category);
+  const paidPool = useQuery(
+    api.raceQuotes.getAvailableQuotes,
+    poolKnown && usesPaidPool ? { category } : "skip"
+  );
+  // The free pool is fetched once per category rather than subscribed to: it
+  // holds hundreds of quotes and changes whenever a paying user finishes a race.
+  const convex = useConvex();
+  const [freePool, setFreePool] = useState({ category: null, quotes: undefined });
+  const wantsFreePool = poolKnown && !usesPaidPool;
+  useEffect(() => {
+    if (!wantsFreePool) return;
+    let cancelled = false;
+    convex
+      .query(api.raceQuotes.getFreePool, { category })
+      .then((quotes) => {
+        if (!cancelled) setFreePool({ category, quotes });
+      })
+      .catch((err) => {
+        console.error("Failed to load the free quote pool:", err);
+        // An empty pool falls back to the built-in quotes.
+        if (!cancelled) setFreePool({ category, quotes: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [convex, category, wantsFreePool]);
+  const availableQuotes = !poolKnown
+    ? undefined
+    : usesPaidPool
+      ? paidPool
+      : freePool.category === category
+        ? freePool.quotes
+        : undefined;
 
   // Saving the on-screen quote to the user's list, available before the race
   // starts (the results screen has its own button for afterwards). The stored
@@ -174,12 +233,12 @@ function App() {
     });
     handleFocusClick();
   };
-  latest.current = { category, mode, availableQuotes, quoteCount, customCategories, isAuthenticated };
+  latest.current = { category, mode, availableQuotes, customCategories, freshQuotes };
 
+  /** Uses up a paid-pool quote (it moves to the free pool). Free players never use quotes up. */
   const retireQuote = (quoteId) => {
-    if (!quoteId) return;
-    seenQuoteIds.current.delete(quoteId);
-    deleteQuote({ quoteId }).catch((err) =>
+    if (!quoteId || !freshQuotes) return;
+    retireQuoteMutation({ quoteId }).catch((err) =>
       console.error("Failed to retire quote:", err)
     );
   };
@@ -231,27 +290,23 @@ function App() {
   // switching back restores it instead of leaving the word list in place.
   const parkedQuoteRef = useRef(null); // { text, id } | null
 
-  // Keep each category's pool topped up to TARGET_POOL_SIZE. Refilling starts
-  // once it dips below REFILL_BELOW rather than on every single draw, so one
-  // generation request restocks several quotes instead of one per race.
-  const TARGET_POOL_SIZE = 20;
-  const REFILL_BELOW = 15;
+  // Paying users keep the paid pool topped up to TARGET_POOL_SIZE. Refilling
+  // starts once it dips below REFILL_BELOW rather than on every single draw,
+  // so one generation request restocks several quotes instead of one per race.
+  // This is the only time new quotes are generated.
+  const TARGET_POOL_SIZE = 35;
+  const REFILL_BELOW = 30;
   const REFILL_THROTTLE_MS = 30000;
-  // Every page load also adds a few fresh quotes, so the pool keeps turning
-  // over for a returning user even when it is already at target.
-  const INITIAL_BATCH_SIZE = 5;
 
   const poolIsLow = () => {
-    const { mode: m, availableQuotes: quotes, quoteCount: count } = latest.current;
-    if (m === "words") return false;
-    if (count === 0) return true;
+    const { mode: m, availableQuotes: quotes, freshQuotes: canRefill } = latest.current;
+    if (m === "words" || !canRefill) return false;
     return quotes !== undefined && quotes.length < REFILL_BELOW;
   };
 
   /** How many quotes are needed to bring the current category back to target. */
   const poolDeficit = () => {
-    const { availableQuotes: quotes, quoteCount: count } = latest.current;
-    const have = quotes?.length ?? count ?? 0;
+    const have = latest.current.availableQuotes?.length ?? 0;
     return Math.max(TARGET_POOL_SIZE - have, 1);
   };
 
@@ -276,10 +331,9 @@ function App() {
     if (poolIsLow()) generateNewQuotesIfNeeded(latest.current.category);
   };
 
-  const generateNewQuotesIfNeeded = async (
-    targetCategory = category,
-    { minCount = 0, reason = "" } = {}
-  ) => {
+  const generateNewQuotesIfNeeded = async (targetCategory = category) => {
+    // Only paying users generate; the server refuses everyone else anyway.
+    if (!latest.current.freshQuotes) return;
     const custom = isCustomCategory(targetCategory);
     const topic = custom ? topicFor(targetCategory, latest.current.customCategories) : undefined;
     // The category list hasn't loaded yet (or the category was just deleted).
@@ -307,15 +361,8 @@ function App() {
     lastGenerationTime.current[targetCategory] = now;
 
     try {
-      const wanted = Math.max(poolDeficit(), minCount);
-      console.log(
-        `Generating ${wanted} new AI quotes for '${targetCategory}'${reason ? ` (${reason})` : ""}...`
-      );
-      // AI generation is for signed-in users only; signed-out visitors go
-      // straight to the built-in backups below.
-      if (!latest.current.isAuthenticated) {
-        throw new Error("Signed out, skipping AI quote generation");
-      }
+      const wanted = poolDeficit();
+      console.log(`Generating ${wanted} new AI quotes for '${targetCategory}'...`);
       const existing = (latest.current.availableQuotes || []).map((q) => q.quote);
       const { quotes: newQuotes, model } = await generateQuotesBatch(
         targetCategory,
@@ -396,7 +443,9 @@ function App() {
       // so exclude it from both passes.
       const candidates = quotesList.filter((q) => q.id !== currentQuoteId);
       const unseen = candidates.filter((q) => !seenQuoteIds.current.has(q.id));
-      if (unseen.length === 0) seenQuoteIds.current.clear();
+      // Every quote here has been seen: start this pool over, leaving what
+      // was seen in other categories alone.
+      if (unseen.length === 0) candidates.forEach((q) => seenQuoteIds.current.delete(q.id));
 
       const pool = unseen.length > 0 ? unseen : candidates;
       if (pool.length === 0) {
@@ -406,6 +455,7 @@ function App() {
 
       const selectedQuote = pool[Math.floor(Math.random() * pool.length)];
       seenQuoteIds.current.add(selectedQuote.id);
+      writeSeenQuotes(seenQuoteIds.current);
       setSentance(selectedQuote.quote);
       setCurrentQuoteId(selectedQuote.id);
       return;
@@ -487,39 +537,14 @@ function App() {
     setRaceId((id) => id + 1);
   }, [mode, wordCount]);
 
-  // First load: once the pool is known, generate a fresh batch regardless of
-  // how full it is. Runs before the low-pool monitor below so that, when both
-  // want to generate at the same moment, this one wins and asks for at least
-  // INITIAL_BATCH_SIZE (or the full deficit if that is larger); the monitor's
-  // request is then queued behind it and turns into a no-op once the pool is
-  // healthy.
-  useEffect(() => {
-    if (mode !== "quote" || availableQuotes === undefined) return;
-    // Wait for the session, or a signed-in user's first batch is skipped as
-    // signed out.
-    if (convexAuthLoading) return;
-    // And for the AI model choice, or the first batch goes to Gemini regardless.
-    if (!aiReady) return;
-    // A custom topic restored on reload needs its name for the prompt, which
-    // arrives after sign-in. Without it the request is dropped, so don't spend
-    // the once-per-load batch until it's known.
-    if (isCustomCategory(category) && !customTopic) return;
-    if (hasKickedOffInitialBatch.current) return;
-    hasKickedOffInitialBatch.current = true;
-    generateNewQuotesIfNeeded(category, {
-      minCount: INITIAL_BATCH_SIZE,
-      reason: "fresh batch on page load",
-    });
-  }, [availableQuotes, mode, category, convexAuthLoading, aiReady, customTopic]);
-
-  // Monitor quote pool: if empty or low, proactively trigger AI quote generation.
-  // customTopic is a dependency because a custom pool can't be filled until
-  // the category list has loaded, and aiReady because nothing should be
-  // generated before the AI model choice is known.
+  // Monitor the paid pool: if empty or low, proactively trigger AI quote
+  // generation. customTopic is a dependency because a custom pool can't be
+  // filled until the category list has loaded, and aiReady because nothing
+  // should be generated before the AI model choice is known.
   useEffect(() => {
     if (!aiReady) return;
     refillIfLow();
-  }, [availableQuotes?.length, quoteCount, mode, category, customTopic, aiReady]);
+  }, [availableQuotes?.length, mode, category, customTopic, aiReady, freshQuotes]);
 
   // A custom category that no longer exists (deleted in another tab, or the
   // user signed out) has nothing to draw from. Wait for the session first, so
@@ -783,7 +808,9 @@ function App() {
               <div className="typing-area quote-loading" aria-busy="true">
                 {failedCategory === category
                   ? `Couldn't generate ${categoryLabel} quotes yet. Retrying...`
-                  : `Loading a ${categoryLabel} quote...`}
+                  : isCustomCategory(category) && !freshQuotes && availableQuotes?.length === 0
+                    ? "This topic is out of quotes. New ones are part of Pro."
+                    : `Loading a ${categoryLabel} quote...`}
               </div>
             )}
             {mode === "quote" && quoteReady && (

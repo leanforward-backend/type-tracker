@@ -11,10 +11,12 @@
 import type * as aiConfig from "../aiConfig.js";
 import type * as aiModels from "../aiModels.js";
 import type * as billing from "../billing.js";
+import type * as crons from "../crons.js";
 import type * as customCategories from "../customCategories.js";
 import type * as entitlements from "../entitlements.js";
 import type * as http from "../http.js";
 import type * as mistakes from "../mistakes.js";
+import type * as quoteRules from "../quoteRules.js";
 import type * as quoteSimilarity from "../quoteSimilarity.js";
 import type * as raceQuotes from "../raceQuotes.js";
 import type * as races from "../races.js";
@@ -31,10 +33,12 @@ declare const fullApi: ApiFromModules<{
   aiConfig: typeof aiConfig;
   aiModels: typeof aiModels;
   billing: typeof billing;
+  crons: typeof crons;
   customCategories: typeof customCategories;
   entitlements: typeof entitlements;
   http: typeof http;
   mistakes: typeof mistakes;
+  quoteRules: typeof quoteRules;
   quoteSimilarity: typeof quoteSimilarity;
   raceQuotes: typeof raceQuotes;
   races: typeof races;

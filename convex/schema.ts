@@ -25,7 +25,15 @@ export default defineSchema({
     // or "built-in" for the backup quotes. Reported by the client; missing on
     // quotes saved before it was recorded.
     model: v.optional(v.string()),
-  }).index("by_category", ["category"]),
+    // Built-in categories have two pools. "paid" is drawn by paying users, who
+    // use each quote up, and is refilled by AI. "free" is drawn by everyone
+    // else and never used up; it is seeded offline and grows from paid quotes
+    // once they've been played. Custom topics only use "paid". Missing on
+    // quotes saved before the split, which count as "paid".
+    pool: v.optional(v.union(v.literal("free"), v.literal("paid"))),
+  })
+    .index("by_category", ["category"])
+    .index("by_category_pool", ["category", "pool"]),
   // Topics a user typed in themselves. Their quotes live in raceQuotes under
   // the category key `custom:<_id>`, so each user's topic has its own pool.
   customCategories: defineTable({

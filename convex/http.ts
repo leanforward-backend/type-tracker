@@ -78,7 +78,7 @@ function classify(path: string, body: string): AiKind {
 
 const LIMIT_MESSAGES: Record<AiKind, string> = {
   chat: "You've used all your AI uses. Upgrade to Pro for more.",
-  quotes: "Today's quote refills are used up. Try again tomorrow.",
+  quotes: "New AI quotes are part of Pro, up to a daily limit.",
 };
 
 /** Reads the start of a stream: true = it worked, false = it failed, null = can't tell yet. */
