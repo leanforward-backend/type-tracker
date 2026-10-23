@@ -4,7 +4,7 @@
  * your own subscription, instead of the AI APIs the app pays for.
  *
  *   node scripts/seed-free-quotes.mjs [--target 300] [--category coding ...]
- *     [--model sonnet] [--parallel 3] [--batch 20] [--prod]
+ *     [--model haiku] [--parallel 3] [--batch 20] [--prod]
  *
  * Needs `claude` logged in to a subscription and `npx convex` able to reach the
  * deployment (the dev one in .env.local, or --prod). Each batch uses the app's
@@ -30,7 +30,7 @@ const { values: opts } = parseArgs({
   options: {
     target: { type: "string", default: "300" },
     category: { type: "string", multiple: true },
-    model: { type: "string", default: "sonnet" },
+    model: { type: "string", default: "haiku" },
     parallel: { type: "string", default: "3" },
     batch: { type: "string", default: "20" },
     prod: { type: "boolean", default: false },
