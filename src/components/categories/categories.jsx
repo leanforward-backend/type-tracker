@@ -168,9 +168,12 @@ export const Categories = ({
               className="h-9 text-[var(--text-primary)] placeholder:text-[#8a8a8a]"
             />
             <CommandList>
-              <CommandEmpty className="py-6 text-center text-sm text-[var(--text-secondary)]">
-                No category found.
-              </CommandEmpty>
+              {/* With a create row on offer, "no match" is just noise above it. */}
+              {!(canCreate && typed.length >= 2) && (
+                <CommandEmpty className="py-6 text-center text-sm text-[var(--text-secondary)]">
+                  No category found.
+                </CommandEmpty>
+              )}
               <CommandGroup className="bg-transparent p-1">
                 {BUILT_IN_CATEGORIES.map((category) => (
                   <CommandItem
@@ -232,8 +235,11 @@ export const Categories = ({
                 </CommandGroup>
               )}
 
-              <CommandSeparator className="bg-[#2e2e2e]" />
-              <CommandGroup className="bg-transparent p-1">
+              <CommandSeparator alwaysRender className="bg-[#2e2e2e]" />
+              {/* cmdk hides a group during a search unless one of its items
+                  matched, and a forceMount item doesn't count, so the group
+                  has to be force-mounted too. */}
+              <CommandGroup forceMount className="bg-transparent p-1">
                 <CommandItem
                   // Always shown, so a search with no match turns straight
                   // into "Create <what you typed>".

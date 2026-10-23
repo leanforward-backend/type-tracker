@@ -13,6 +13,8 @@ import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 // Gemini writes formulas as LaTeX ($N$, $$W + R > N$$). Without these the
 // delimiters render as literal dollar signs.
 import rehypeKatex from "rehype-katex";
+// Gemini often answers with tables, which plain markdown leaves as raw pipes.
+import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import "katex/dist/katex.min.css";
 import { prepareMarkdown } from "./markdownPrep";
@@ -458,10 +460,10 @@ CRITICAL FORMATTING RULE: Write purely about the code and technology. Never ment
                     </Button>
                   </div>
                 ) : msg.role === "model" ? (
-                  <div className="text-left" style={{ whiteSpace: "pre-wrap" }}>
+                  <div className="ai-markdown text-left" style={{ whiteSpace: "pre-wrap" }}>
                     <h1 className="mb-4 font-bold">AI Response:</h1>
                     <ReactMarkdown
-                      remarkPlugins={[remarkMath]}
+                      remarkPlugins={[remarkGfm, remarkMath]}
                       rehypePlugins={[[rehypeKatex, { output: "html", throwOnError: false }]]}
                       components={{
                         // eslint-disable-next-line no-unused-vars -- keep react-markdown's AST node off the DOM
@@ -494,6 +496,15 @@ CRITICAL FORMATTING RULE: Write purely about the code and technology. Never ment
                             >
                               {children}
                             </a>
+                          );
+                        },
+                        // Wide tables scroll inside the bubble instead of stretching it.
+                        // eslint-disable-next-line no-unused-vars -- keep react-markdown's AST node off the DOM
+                        table({ node, ...props }) {
+                          return (
+                            <div className="ai-table-scroll">
+                              <table {...props} />
+                            </div>
                           );
                         },
                       }}
