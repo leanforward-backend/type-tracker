@@ -116,6 +116,8 @@ export function computeEntitlements(
     // Draws from the paid pools: never sees a repeat, and refills them with AI.
     freshQuotes: paid || isAdmin(identity),
     subscribed,
+    // "month" or "year" while subscribed; null if not, or not known yet.
+    subInterval: subscribed ? (account?.subInterval ?? null) : null,
     hasBillingAccount: Boolean(account?.stripeCustomerId),
     isAdmin: isAdmin(identity),
   };

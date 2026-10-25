@@ -19,11 +19,13 @@ import { dedupeQuotes } from "./quoteSimilarity";
  * - free: drawn by free and signed-out players, who never use quotes up and
  *   never generate. Seeded offline (scripts/seed-free-quotes.mjs) and grown by
  *   the paid quotes once they've been played, up to FREE_POOL_MAX.
- * A custom topic belongs to one user and only has a paid pool.
+ * A custom topic belongs to one user and only has a paid pool. "random" is
+ * not a category: reading it returns every built-in category's pool at once.
  */
 
 // Keep in step with src/components/categories/builtInCategories.js.
 const BUILT_IN_CATEGORIES = new Set([
+  "ai",
   "coding",
   "architecture",
   "math",
@@ -33,6 +35,7 @@ const BUILT_IN_CATEGORIES = new Set([
   "art",
   "music",
 ]);
+const RANDOM = "random";
 const MAX_BATCH = 25;
 const MAX_IMPORT = 100;
 const MIN_QUOTE_LENGTH = 20;
@@ -50,6 +53,15 @@ async function poolQuotes(ctx: QueryCtx, category: string, pool: Pool) {
     .query("raceQuotes")
     .withIndex("by_category_pool", (q) => q.eq("category", category).eq("pool", pool))
     .collect();
+}
+
+/** A category's pool, or for "random" every built-in category's pool together. */
+async function readPool(ctx: QueryCtx, category: string, pool: Pool) {
+  if (category !== RANDOM) return await poolQuotes(ctx, category, pool);
+  const pools = await Promise.all(
+    [...BUILT_IN_CATEGORIES].map((c) => poolQuotes(ctx, c, pool))
+  );
+  return pools.flat();
 }
 
 const toClient = (q: Doc<"raceQuotes">) => ({ id: q._id, quote: q.quote, category: q.category });
@@ -109,7 +121,7 @@ export const getAvailableQuotes = query({
   },
   handler: async (ctx, args) => {
     if (!args.category) return [];
-    return (await poolQuotes(ctx, args.category, "paid")).map(toClient);
+    return (await readPool(ctx, args.category, "paid")).map(toClient);
   },
 });
 
@@ -134,8 +146,8 @@ export const getFreePool = query({
     category: v.string(),
   },
   handler: async (ctx, args) => {
-    if (!BUILT_IN_CATEGORIES.has(args.category)) return [];
-    return (await poolQuotes(ctx, args.category, "free")).map(toClient);
+    if (args.category !== RANDOM && !BUILT_IN_CATEGORIES.has(args.category)) return [];
+    return (await readPool(ctx, args.category, "free")).map(toClient);
   },
 });
 
@@ -231,6 +243,27 @@ export const freePoolForSeeding = internalQuery({
   handler: async (ctx, args) => {
     const free = await poolQuotes(ctx, args.category, "free");
     return { count: free.length, recent: free.slice(-60).map((q) => q.quote) };
+  },
+});
+
+/**
+ * Empties a free pool before reseeding it, or with `model` only that model's
+ * quotes. Run by hand: `npx convex run raceQuotes:clearFreePool`.
+ */
+export const clearFreePool = internalMutation({
+  args: {
+    category: v.string(),
+    model: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const free = await poolQuotes(ctx, args.category, "free");
+    let removed = 0;
+    for (const quote of free) {
+      if (args.model !== undefined && quote.model !== args.model) continue;
+      await ctx.db.delete(quote._id);
+      removed++;
+    }
+    return removed;
   },
 });
 

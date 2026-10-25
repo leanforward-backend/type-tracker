@@ -11,7 +11,10 @@ import { computeEntitlements } from "./entitlements";
  * Convex env vars (`npx convex env set NAME value`):
  *   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
  *   STRIPE_PRICE_MONTHLY, STRIPE_PRICE_YEARLY, STRIPE_PRICE_PACK,
- *   SITE_URL (where Checkout sends the user back to, no trailing slash).
+ *   SITE_URL (where Checkout sends the user back to, no trailing slash),
+ *   and optionally OTHER_SITE_URLS (see returnUrl) and STRIPE_PORTAL_CONFIG
+ *   (a billing portal configuration id).
+ * scripts/setup-stripe.mjs creates all of these through the Stripe API.
  */
 
 const PRICE_ENV = {
@@ -32,7 +35,20 @@ function stripe(): Stripe {
   return client;
 }
 
-const siteUrl = () => requireEnv("SITE_URL").replace(/\/$/, "");
+const trimUrl = (url: string) => url.trim().replace(/\/$/, "");
+
+/**
+ * Where Checkout and the portal send people back to: the site they came from
+ * (the `origin` the browser passes) when it is SITE_URL or listed in
+ * OTHER_SITE_URLS (comma-separated), otherwise SITE_URL. Only listed sites, so
+ * a caller can't turn these into redirects to anywhere they like.
+ */
+function returnUrl(origin: string | undefined): string {
+  const site = trimUrl(requireEnv("SITE_URL"));
+  const others = (process.env.OTHER_SITE_URLS ?? "").split(",").map(trimUrl).filter(Boolean);
+  const wanted = origin && trimUrl(origin);
+  return wanted && (wanted === site || others.includes(wanted)) ? wanted : site;
+}
 
 async function signedIn(ctx: ActionCtx) {
   const identity = await ctx.auth.getUserIdentity();
@@ -43,8 +59,9 @@ async function signedIn(ctx: ActionCtx) {
 export const createCheckout = action({
   args: {
     kind: v.union(v.literal("monthly"), v.literal("yearly"), v.literal("pack")),
+    origin: v.optional(v.string()),
   },
-  handler: async (ctx, { kind }): Promise<string> => {
+  handler: async (ctx, { kind, origin }): Promise<string> => {
     const identity = await signedIn(ctx);
     const userId = identity.subject;
     const price = requireEnv(PRICE_ENV[kind]);
@@ -73,8 +90,8 @@ export const createCheckout = action({
       metadata: { userId, kind },
       ...(kind === "pack" ? {} : { subscription_data: { metadata: { userId } } }),
       allow_promotion_codes: true,
-      success_url: `${siteUrl()}/?checkout=success`,
-      cancel_url: `${siteUrl()}/?checkout=cancelled`,
+      success_url: `${returnUrl(origin)}/?checkout=success`,
+      cancel_url: `${returnUrl(origin)}/?checkout=cancelled`,
     });
     if (!session.url) throw new Error("Stripe didn't return a checkout URL.");
     return session.url;
@@ -82,8 +99,8 @@ export const createCheckout = action({
 });
 
 export const createPortal = action({
-  args: {},
-  handler: async (ctx): Promise<string> => {
+  args: { origin: v.optional(v.string()) },
+  handler: async (ctx, { origin }): Promise<string> => {
     const identity = await signedIn(ctx);
     const account = await ctx.runQuery(internal.billing.getAccount, {
       userId: identity.subject,
@@ -91,7 +108,9 @@ export const createPortal = action({
     if (!account?.stripeCustomerId) throw new Error("No billing account yet.");
     const session = await stripe().billingPortal.sessions.create({
       customer: account.stripeCustomerId,
-      return_url: siteUrl(),
+      return_url: returnUrl(origin),
+      // Set by scripts/setup-stripe.mjs when no dashboard default exists.
+      configuration: process.env.STRIPE_PORTAL_CONFIG || undefined,
     });
     return session.url;
   },
@@ -104,13 +123,15 @@ async function syncSubscription(ctx: ActionCtx, subscriptionId: string) {
   const sub = await stripe().subscriptions.retrieve(subscriptionId);
   // Since API version 2025-03-31 the period lives on each item, not the
   // subscription. There is one item (one price) per subscription here.
-  const periodEnd = sub.items.data[0]?.current_period_end;
+  const item = sub.items.data[0];
+  const periodEnd = item?.current_period_end;
   await ctx.runMutation(internal.billing.setSubscription, {
     userId: sub.metadata?.userId || undefined,
     customerId: idOf(sub.customer)!,
     subscriptionId: sub.id,
     status: sub.status,
     periodEnd: periodEnd ? periodEnd * 1000 : undefined,
+    interval: item?.price.recurring?.interval,
   });
 }
 

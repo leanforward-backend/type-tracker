@@ -90,14 +90,16 @@ export const setSubscription = internalMutation({
     subscriptionId: v.string(),
     status: v.string(),
     periodEnd: v.optional(v.number()),
+    interval: v.optional(v.string()),
   },
-  handler: async (ctx, { userId, customerId, subscriptionId, status, periodEnd }) => {
+  handler: async (ctx, { userId, customerId, subscriptionId, status, periodEnd, interval }) => {
     const account = await findAccount(ctx, userId, customerId);
     const fields = {
       stripeCustomerId: customerId,
       subscriptionId,
       subStatus: status,
       subCurrentPeriodEnd: periodEnd,
+      subInterval: interval,
     };
     if (account) {
       // A customer with an old dead subscription and a new live one gets

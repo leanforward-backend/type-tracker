@@ -17,12 +17,14 @@ import { aiUsesLabel } from "./aiUsesLabel";
 const PLANS = [
   {
     kind: "monthly",
+    interval: "month",
     name: "Pro monthly",
     price: "$4 / month",
     detail: "Full stats, custom topics, 300 AI uses a month.",
   },
   {
     kind: "yearly",
+    interval: "year",
     name: "Pro yearly",
     price: "$36 / year",
     detail: "Same as monthly, three months free.",
@@ -41,6 +43,19 @@ const TIER_LABELS = {
   comped: "Pro (comped)",
   lifetime: "Lifetime",
 };
+
+/**
+ * A plan's button: "Choose", "Current", "Switch" (the other Pro plan, changed
+ * in the billing portal) or "Included" (comped). A subscription synced before
+ * its interval was stored has none, so both Pro plans show as current.
+ */
+function planButton(plan, me) {
+  if (plan.kind === "pack") return "Choose";
+  if (me?.tier === "comped") return "Included";
+  if (me?.tier !== "pro") return "Choose";
+  if (!me.subInterval || me.subInterval === plan.interval) return "Current";
+  return "Switch";
+}
 
 /** Convex wraps thrown messages as "[CONVEX A(...)] ... Uncaught Error: <msg>". */
 const readableError = (err) =>
@@ -96,8 +111,12 @@ export function UpgradeButton({ className = "btn", children = "Upgrade" }) {
 
         <div className="flex flex-col gap-3">
           {PLANS.map((plan) => {
-            const alreadyHave =
-              plan.kind !== "pack" && (me?.tier === "pro" || me?.tier === "comped");
+            const label = planButton(plan, me);
+            // Changing between monthly and yearly happens in the billing portal.
+            const open = () =>
+              label === "Switch"
+                ? createPortal({ origin: window.location.origin })
+                : createCheckout({ kind: plan.kind, origin: window.location.origin });
             return (
               <div
                 key={plan.kind}
@@ -112,10 +131,10 @@ export function UpgradeButton({ className = "btn", children = "Upgrade" }) {
                 </div>
                 <button
                   className="btn btn-primary shrink-0"
-                  disabled={busy !== null || alreadyHave || !me}
-                  onClick={() => go(plan.kind, () => createCheckout({ kind: plan.kind }))}
+                  disabled={busy !== null || !me || label === "Current" || label === "Included"}
+                  onClick={() => go(plan.kind, open)}
                 >
-                  {busy === plan.kind ? "Opening..." : alreadyHave ? "Current" : "Choose"}
+                  {busy === plan.kind ? "Opening..." : label}
                 </button>
               </div>
             );
@@ -132,7 +151,7 @@ export function UpgradeButton({ className = "btn", children = "Upgrade" }) {
           <button
             className="btn self-start"
             disabled={busy !== null}
-            onClick={() => go("portal", () => createPortal({}))}
+            onClick={() => go("portal", () => createPortal({ origin: window.location.origin }))}
           >
             {busy === "portal" ? "Opening..." : "Manage billing"}
           </button>

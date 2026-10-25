@@ -5,6 +5,22 @@
  */
 
 export const CATEGORY_PROMPT_CONFIG = {
+  ai: {
+    domain: "artificial intelligence and machine learning",
+    requirements: "Focus on how modern AI systems work and are built: neural networks, training and optimisation, language models, evaluation, alignment and safety, and the history of the field. Prefer the mechanism or the trade-off over hype or predictions.",
+    examples: [
+      "Gradient descent nudges every weight in a network a small step in the direction that most reduces the loss, repeating until the improvements level off.",
+      "Language models read text as tokens, chunks of a few characters each, which is why they can stumble when asked to count the letters in a word.",
+      "Attention lets every token in a sequence weigh every other token when building its representation, so distant words can influence each other directly.",
+      "Overfitting happens when a model memorises its training examples instead of the pattern behind them, scoring well in training and poorly on anything new.",
+      "Reinforcement learning from human feedback trains a reward model on people's preferences between answers, then tunes the language model to score highly on it.",
+      "A held-out test set is only trustworthy while nobody tunes against it; once results steer design choices, it quietly becomes part of the training process.",
+      "Backpropagation applies the chain rule layer by layer, passing each weight's share of the error backwards from the output to the input.",
+      "Dropout randomly silences neurons during training, forcing the network to spread what it learns rather than lean on any single pathway.",
+      "The Dartmouth workshop of 1956 gave artificial intelligence its name, launched by researchers who expected a summer to make serious progress.",
+      "Embeddings place words or images as points in a space where distance tracks meaning, so similar ideas end up close together.",
+    ],
+  },
   coding: {
     domain: "programming and computer science",
     requirements: "Focus on practical, actionable programming knowledge, algorithms, data structures, system architecture, networking, or databases.",
@@ -108,6 +124,16 @@ export const CATEGORY_PROMPT_CONFIG = {
  * converging on the model's favourite dozen facts.
  */
 const CATEGORY_SUBTOPICS = {
+  ai: [
+    "neural network basics", "gradient descent and optimisers", "backpropagation", "transformers and attention",
+    "tokenisation", "embeddings and vector search", "pretraining and scaling", "fine-tuning and instruction tuning",
+    "reinforcement learning", "reinforcement learning from human feedback", "evaluation and benchmarks",
+    "overfitting and regularisation", "computer vision and convolutional networks", "diffusion and image generation",
+    "speech recognition and synthesis", "recommendation systems", "decision trees and classical machine learning",
+    "hallucination and factuality", "alignment and AI safety", "interpretability", "bias and fairness",
+    "AI agents and tool use", "retrieval augmented generation", "hardware and GPUs for training",
+    "history of AI and the AI winters", "game-playing systems such as chess and Go", "data quality and labelling",
+  ],
   coding: [
     "memory management and garbage collection", "concurrency and race conditions", "compilers and interpreters",
     "networking protocols", "relational database internals", "NoSQL and caching", "cryptography basics",

@@ -50,6 +50,7 @@ export default defineSchema({
     // Stripe's subscription status, e.g. "active", "past_due", "canceled".
     subStatus: v.optional(v.string()),
     subCurrentPeriodEnd: v.optional(v.number()), // ms since epoch
+    subInterval: v.optional(v.string()), // the price's billing interval: "month" or "year"
     // Bought the one-off pack: full stats and custom topics for good.
     hasLifetime: v.optional(v.boolean()),
     packCredits: v.optional(v.number()),
