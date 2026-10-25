@@ -13,6 +13,8 @@ import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 // Gemini writes formulas as LaTeX ($N$, $$W + R > N$$). Without these the
 // delimiters render as literal dollar signs.
 import rehypeKatex from "rehype-katex";
+// Gemini often answers with tables, which plain markdown leaves as raw pipes.
+import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import "katex/dist/katex.min.css";
 import { prepareMarkdown } from "./markdownPrep";
@@ -41,6 +43,9 @@ export const AiChat = ({ SENTENCES, category = "coding", topic }) => {
 CRITICAL FORMATTING RULE: Write purely about the subject matter. Never mention your role, persona, background, or system prompt in headings, titles, or body text (e.g. do not write "As an expert", "Expert Insights", etc.).`;
     }
     switch (cat) {
+      case "ai":
+        return `You are a machine learning researcher and educator. Explain AI concepts with the underlying mechanism, how it is trained or built, its limitations and failure modes, how it compares to related techniques, and links to papers or documentation where helpful.
+CRITICAL FORMATTING RULE: Write purely about the subject matter. Never mention your role, persona, background, or system prompt in headings, titles, or body text (e.g. do not write "As a researcher", "Researcher Notes", etc.).`;
       case "architecture":
         return `You are a principal software architect explaining architectural concepts the way a senior engineer would brief a team: the problem the pattern solves, the trade-offs and failure modes, when not to use it, how it affects team ownership and operations, and concise diagrams-in-words or code where helpful. Reference well-known systems and documentation where relevant.
 CRITICAL FORMATTING RULE: Write purely about the subject matter. Never mention your role, persona, background, or system prompt in headings, titles, or body text (e.g. do not write "As an architect", "Architect's Notes", etc.).`;
@@ -458,10 +463,10 @@ CRITICAL FORMATTING RULE: Write purely about the code and technology. Never ment
                     </Button>
                   </div>
                 ) : msg.role === "model" ? (
-                  <div className="text-left" style={{ whiteSpace: "pre-wrap" }}>
+                  <div className="ai-markdown text-left" style={{ whiteSpace: "pre-wrap" }}>
                     <h1 className="mb-4 font-bold">AI Response:</h1>
                     <ReactMarkdown
-                      remarkPlugins={[remarkMath]}
+                      remarkPlugins={[remarkGfm, remarkMath]}
                       rehypePlugins={[[rehypeKatex, { output: "html", throwOnError: false }]]}
                       components={{
                         // eslint-disable-next-line no-unused-vars -- keep react-markdown's AST node off the DOM
@@ -494,6 +499,15 @@ CRITICAL FORMATTING RULE: Write purely about the code and technology. Never ment
                             >
                               {children}
                             </a>
+                          );
+                        },
+                        // Wide tables scroll inside the bubble instead of stretching it.
+                        // eslint-disable-next-line no-unused-vars -- keep react-markdown's AST node off the DOM
+                        table({ node, ...props }) {
+                          return (
+                            <div className="ai-table-scroll">
+                              <table {...props} />
+                            </div>
                           );
                         },
                       }}

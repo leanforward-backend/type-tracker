@@ -12,7 +12,7 @@ import {
   CommandSeparator,
 } from "../ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
-import { BUILT_IN_CATEGORIES } from "./builtInCategories";
+import { RANDOM_CATEGORY, TOPIC_OPTIONS } from "./builtInCategories";
 
 const CREATE_VALUE = "__create_category__";
 
@@ -25,7 +25,7 @@ const itemClass =
 // pinned to the app's own palette variables instead; each pairing clears 4.5:1
 // against the surface it sits on.
 export const Categories = ({
-  value = "coding",
+  value = RANDOM_CATEGORY.value,
   onChange,
   customCategories = [],
   canCreate = false,
@@ -41,7 +41,7 @@ export const Categories = ({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const selected = [...BUILT_IN_CATEGORIES, ...customCategories].find(
+  const selected = [...TOPIC_OPTIONS, ...customCategories].find(
     (category) => category.value === value
   );
 
@@ -56,7 +56,7 @@ export const Categories = ({
   };
 
   const select = (newValue) => {
-    onChange?.(newValue === value ? "coding" : newValue);
+    onChange?.(newValue);
     handleOpenChange(false);
   };
 
@@ -168,11 +168,14 @@ export const Categories = ({
               className="h-9 text-[var(--text-primary)] placeholder:text-[#8a8a8a]"
             />
             <CommandList>
-              <CommandEmpty className="py-6 text-center text-sm text-[var(--text-secondary)]">
-                No category found.
-              </CommandEmpty>
+              {/* With a create row on offer, "no match" is just noise above it. */}
+              {!(canCreate && typed.length >= 2) && (
+                <CommandEmpty className="py-6 text-center text-sm text-[var(--text-secondary)]">
+                  No category found.
+                </CommandEmpty>
+              )}
               <CommandGroup className="bg-transparent p-1">
-                {BUILT_IN_CATEGORIES.map((category) => (
+                {TOPIC_OPTIONS.map((category) => (
                   <CommandItem
                     key={category.value}
                     value={category.value}
@@ -232,8 +235,11 @@ export const Categories = ({
                 </CommandGroup>
               )}
 
-              <CommandSeparator className="bg-[#2e2e2e]" />
-              <CommandGroup className="bg-transparent p-1">
+              <CommandSeparator alwaysRender className="bg-[#2e2e2e]" />
+              {/* cmdk hides a group during a search unless one of its items
+                  matched, and a forceMount item doesn't count, so the group
+                  has to be force-mounted too. */}
+              <CommandGroup forceMount className="bg-transparent p-1">
                 <CommandItem
                   // Always shown, so a search with no match turns straight
                   // into "Create <what you typed>".

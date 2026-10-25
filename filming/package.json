@@ -1,0 +1,19 @@
+{
+  "name": "type-tracker-filming",
+  "private": true,
+  "type": "module",
+  "description": "Scripted product-demo recording for TypeTracker. See README.md.",
+  "scripts": {
+    "setup-demo": "node setup-demo.mjs",
+    "record": "node setup-demo.mjs && prlimit --core=0 node record.mjs",
+    "render": "node render.mjs",
+    "film": "npm run record && npm run render"
+  },
+  "dependencies": {
+    "@clerk/backend": "^2.0.0",
+    "@clerk/testing": "^1.0.0",
+    "@playwright/test": "^1.50.0",
+    "convex": "^1.29.3",
+    "dotenv": "^16.4.0"
+  }
+}

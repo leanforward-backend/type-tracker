@@ -11,7 +11,12 @@ import {
   setDefaultAiChoice,
 } from "./components/ai/geminiClient";
 import { generateQuotesBatch } from "./components/ai/quoteGenerator";
-import { BUILT_IN_CATEGORIES } from "./components/categories/builtInCategories";
+import {
+  BUILT_IN_CATEGORIES,
+  defaultCategoryFor,
+  RANDOM_CATEGORY,
+  TOPIC_OPTIONS,
+} from "./components/categories/builtInCategories";
 import { Categories } from "./components/categories/categories";
 import Game from "./components/Game";
 import { getFallbackBatch, getFallbackQuote, SENTENCES } from "./components/Sentences";
@@ -23,22 +28,23 @@ import { useTypeTracker } from "./hooks/useTypeTracker";
 
 const CATEGORY_KEY = "type-tracker:category:v1";
 
+/** The topic the user picked last, or null to use their plan's default. */
 function readSavedCategory() {
   try {
     const saved = localStorage.getItem(CATEGORY_KEY);
-    if (saved?.startsWith("custom:") || BUILT_IN_CATEGORIES.some((c) => c.value === saved)) {
+    if (saved?.startsWith("custom:") || TOPIC_OPTIONS.some((c) => c.value === saved)) {
       return saved;
     }
   } catch {
     // Storage may be blocked.
   }
-  return "coding";
+  return null;
 }
 
 // Quotes this browser has already been shown. Free pools are never used up,
 // so without this a returning player would start over at every visit.
 const SEEN_KEY = "type-tracker:seen-quotes:v1";
-// Every free pool at its cap (8 × 500), with room to spare.
+// Every free pool at its cap (9 × 500), with room to spare.
 const MAX_SEEN = 5000;
 
 function readSeenQuotes() {
@@ -59,16 +65,18 @@ function writeSeenQuotes(seen) {
 }
 
 function App() {
-  // Restored on reload. A custom topic is checked against the user's list
-  // once it loads (see the effect further down).
-  const [category, setCategory] = useState(readSavedCategory);
+  // The topic the user picked, restored on reload; null until they pick one,
+  // which means their plan's default (see `category` below). A custom topic is
+  // checked against the user's list once it loads (see the effect further down).
+  const [chosenCategory, setChosenCategory] = useState(readSavedCategory);
   useEffect(() => {
     try {
-      localStorage.setItem(CATEGORY_KEY, category);
+      if (chosenCategory) localStorage.setItem(CATEGORY_KEY, chosenCategory);
+      else localStorage.removeItem(CATEGORY_KEY);
     } catch {
       // Storage may be blocked; the category just won't survive a reload.
     }
-  }, [category]);
+  }, [chosenCategory]);
   const [sentance, setSentance] = useState("");
   const [currentQuoteId, setCurrentQuoteId] = useState(null); // Track current quote ID
   const [view, setView] = useState("game");
@@ -85,6 +93,10 @@ function App() {
   const convexRejectedSession = isSignedIn && !convexAuthLoading && !isAuthenticated;
   // What this account has paid for (convex/entitlements.ts); null when signed out.
   const me = useQuery(api.entitlements.me);
+  // Paying users start on Artificial Intelligence, everyone else on Random.
+  // Not saved, so the default follows the plan when someone upgrades.
+  const defaultCategory = defaultCategoryFor(Boolean(me && me.tier !== "free"));
+  const category = chosenCategory ?? defaultCategory;
 
   // Stripe Checkout sends the user back with ?checkout=success|cancelled.
   // The webhook may land a moment later; `me` updates itself when it does.
@@ -159,7 +171,9 @@ function App() {
       ? "custom topic" // its name is still loading
       : category === "architecture"
         ? "programming architecture"
-        : BUILT_IN_CATEGORIES.find((c) => c.value === category)?.name.toLowerCase() ?? category);
+        : category === "ai"
+          ? "AI"
+          : TOPIC_OPTIONS.find((c) => c.value === category)?.name.toLowerCase() ?? category);
   // The custom category whose last generation attempt failed, for the loading message.
   const [failedCategory, setFailedCategory] = useState(null);
 
@@ -304,10 +318,18 @@ function App() {
     return quotes !== undefined && quotes.length < REFILL_BELOW;
   };
 
-  /** How many quotes are needed to bring the current category back to target. */
-  const poolDeficit = () => {
-    const have = latest.current.availableQuotes?.length ?? 0;
-    return Math.max(TARGET_POOL_SIZE - have, 1);
+  /** How many quotes are needed to bring a category with `have` quotes back to target. */
+  const poolDeficit = (have) => Math.max(TARGET_POOL_SIZE - have, 1);
+
+  /**
+   * The category a refill goes to. Random has no pool of its own, so it tops
+   * up whichever built-in category has the fewest quotes in the mix.
+   */
+  const refillCategoryFor = (selected, quotes = []) => {
+    if (selected !== RANDOM_CATEGORY.value) return selected;
+    const counts = new Map(BUILT_IN_CATEGORIES.map((c) => [c.value, 0]));
+    for (const q of quotes) if (counts.has(q.category)) counts.set(q.category, counts.get(q.category) + 1);
+    return [...counts].reduce((min, entry) => (entry[1] < min[1] ? entry : min))[0];
   };
 
   /**
@@ -331,9 +353,10 @@ function App() {
     if (poolIsLow()) generateNewQuotesIfNeeded(latest.current.category);
   };
 
-  const generateNewQuotesIfNeeded = async (targetCategory = category) => {
+  const generateNewQuotesIfNeeded = async (selectedCategory = category) => {
     // Only paying users generate; the server refuses everyone else anyway.
     if (!latest.current.freshQuotes) return;
+    const targetCategory = refillCategoryFor(selectedCategory, latest.current.availableQuotes);
     const custom = isCustomCategory(targetCategory);
     const topic = custom ? topicFor(targetCategory, latest.current.customCategories) : undefined;
     // The category list hasn't loaded yet (or the category was just deleted).
@@ -360,10 +383,12 @@ function App() {
     refillRequested.current = false;
     lastGenerationTime.current[targetCategory] = now;
 
+    const existing = (latest.current.availableQuotes || [])
+      .filter((q) => q.category === targetCategory)
+      .map((q) => q.quote);
+    const wanted = poolDeficit(existing.length);
     try {
-      const wanted = poolDeficit();
       console.log(`Generating ${wanted} new AI quotes for '${targetCategory}'...`);
-      const existing = (latest.current.availableQuotes || []).map((q) => q.quote);
       const { quotes: newQuotes, model } = await generateQuotesBatch(
         targetCategory,
         wanted,
@@ -400,7 +425,7 @@ function App() {
       // once-per-session guard: quotes are consumed as they're shown, so the
       // pool needs topping up repeatedly. saveQuotesBatch dedupes, and the 30s
       // throttle above bounds how often this runs.
-      const fallbackBatch = getFallbackBatch(targetCategory, poolDeficit());
+      const fallbackBatch = getFallbackBatch(targetCategory, wanted);
       await saveQuotesBatch({
         quotes: fallbackBatch,
         category: targetCategory,
@@ -482,18 +507,20 @@ function App() {
   const handleCreateCategory = (name) => createCustomCategory({ name });
 
   const handleDeleteCategory = (key) => {
-    if (key === category) handleCategoryChange("coding");
+    if (key === category) handleCategoryChange(null);
     deleteCustomCategory({ value: key }).catch((err) =>
       console.error("Failed to delete category:", err)
     );
   };
 
-  const handleCategoryChange = (newCategory) => {
+  /** `choice` is the topic picked, or null to go back to the plan's default. */
+  const handleCategoryChange = (choice) => {
+    const newCategory = choice ?? defaultCategory;
+    setChosenCategory(choice);
     if (newCategory === category) return;
     hasSelectedInitialDbQuote.current = false;
     // A quote parked while in words mode belongs to the old category.
     parkedQuoteRef.current = null;
-    setCategory(newCategory);
     handleFocusClick();
     // In words mode the text on screen is a word list and stays put; the new
     // category only matters once the user returns to quotes.
@@ -553,7 +580,7 @@ function App() {
   useEffect(() => {
     if (!isCustomCategory(category) || convexAuthLoading) return;
     const gone = !isAuthenticated || (customCategories !== undefined && !customTopic);
-    if (gone) handleCategoryChange("coding");
+    if (gone) handleCategoryChange(null);
   }, [category, customCategories, customTopic, convexAuthLoading, isAuthenticated]);
 
   useEffect(() => {
@@ -595,6 +622,11 @@ function App() {
   }, [availableQuotes, mode, category]);
 
   const quoteReady = mode !== "quote" || sentance.length > 0;
+  // Under Random, the chat follows whichever category the quote came from.
+  const shownCategory =
+    category === RANDOM_CATEGORY.value
+      ? availableQuotes?.find((q) => q.id === currentQuoteId)?.category ?? category
+      : category;
 
   // A new quote on screen is a new candidate for saving.
   useEffect(() => {
@@ -814,7 +846,7 @@ function App() {
               </div>
             )}
             {mode === "quote" && quoteReady && (
-              <AiChatbox SENTENCES={sentance} category={category} topic={customTopic} />
+              <AiChatbox SENTENCES={sentance} category={shownCategory} topic={customTopic} />
             )}
           </div>
         ) : (

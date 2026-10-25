@@ -186,6 +186,34 @@
   background: var(--accent-secondary);
 }
 
+/* Markdown tables in AI answers (remark-gfm). Tailwind's preflight strips
+   table styling, so give them borders and padding back. */
+.ai-table-scroll {
+  overflow-x: auto;
+  margin: 1rem 0;
+  white-space: normal;
+}
+
+.ai-markdown table {
+  border-collapse: collapse;
+  font-size: 0.9em;
+  min-width: 60%;
+}
+
+.ai-markdown th,
+.ai-markdown td {
+  border: 1px solid #2e2e2e;
+  padding: 0.45rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.ai-markdown th {
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

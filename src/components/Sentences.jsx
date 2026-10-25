@@ -208,6 +208,18 @@ export const SENTENCES = [
 ];
 
 export const CATEGORY_BACKUPS = {
+  ai: [
+    "Gradient descent nudges every weight in a network a small step in the direction that most reduces the loss, repeating until the improvements level off.",
+    "Language models read text as tokens, chunks of a few characters each, which is why they can stumble when asked to count the letters in a word.",
+    "Attention lets every token in a sequence weigh every other token when building its representation, so distant words can influence each other directly.",
+    "Overfitting happens when a model memorises its training examples instead of the pattern behind them, scoring well in training and poorly on anything new.",
+    "Reinforcement learning from human feedback trains a reward model on people's preferences between answers, then tunes the language model to score highly on it.",
+    "Backpropagation applies the chain rule layer by layer, passing each weight's share of the error backwards from the output to the input.",
+    "Dropout randomly silences neurons during training, forcing the network to spread what it learns rather than lean on any single pathway.",
+    "The Dartmouth workshop of 1956 gave artificial intelligence its name, launched by researchers who expected a summer to make serious progress.",
+    "Embeddings place words or images as points in a space where distance tracks meaning, so similar ideas end up close together.",
+    "Retrieval augmented generation looks up relevant documents first and hands them to the model, grounding its answer in text it can quote.",
+  ],
   coding: SENTENCES,
   architecture: [
     "A bounded context draws a line around one consistent model and vocabulary, so two teams can both have a Customer without fighting over what the word means.",
@@ -286,14 +298,20 @@ export const CATEGORY_BACKUPS = {
   ],
 };
 
+// "random" mixes every category's backups.
+const backupsFor = (category) =>
+  category === "random"
+    ? Object.values(CATEGORY_BACKUPS).flat()
+    : CATEGORY_BACKUPS[category] || CATEGORY_BACKUPS.coding;
+
 export function getFallbackBatch(category = "coding", count = 10) {
-  const pool = CATEGORY_BACKUPS[category] || CATEGORY_BACKUPS.coding;
+  const pool = backupsFor(category);
   const shuffled = [...pool].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, count);
 }
 
 export function getFallbackQuote(category = "coding") {
-  const pool = CATEGORY_BACKUPS[category] || CATEGORY_BACKUPS.coding;
+  const pool = backupsFor(category);
   const randomIndex = Math.floor(Math.random() * pool.length);
   return pool[randomIndex];
 }

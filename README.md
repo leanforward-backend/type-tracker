@@ -1,3 +1,23 @@
+# Type Tracker
+
+## Payments (Stripe)
+
+> **Warning: payments are in Stripe test mode, including on the live site.**
+> https://type-tracker.vercel.app uses the dev Convex deployment
+> (`efficient-pony-114`), which has the `sk_test_` key. Anyone can check out
+> with the test card `4242 4242 4242 4242` and get Pro or the lifetime pack
+> for free, and no real payments can be taken. Before launch: point Vercel at
+> a production Convex deployment and run
+> `node scripts/setup-stripe.mjs --prod --convex-site https://<prod>.convex.site --site-url https://type-tracker.vercel.app`
+> with an `sk_live_` key.
+
+Stripe is configured entirely through Convex env vars (see the top of
+`convex/stripe.ts`); `.env.local` needs no Stripe keys.
+`scripts/setup-stripe.mjs` creates the prices, webhook and billing portal
+through the API and sets those vars. Checkout returns people to the site they
+came from if it is `SITE_URL` or listed in `OTHER_SITE_URLS`, otherwise to
+`SITE_URL`.
+
 # React + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
