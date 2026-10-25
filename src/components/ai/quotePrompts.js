@@ -259,12 +259,17 @@ function customTopicConfig(topic) {
   };
 }
 
-const JSON_ARRAY_FORMAT = 'Respond with a raw JSON array of strings only: ["fact 1", "fact 2", ...]';
+// How many stored quotes a prompt names, enough to cover a whole seeded free
+// pool. At about 40 tokens each that is up to 12k tokens of prompt; the app's
+// paid pools hold a few dozen, so its refills stay small.
+const MAX_AVOID = 300;
+
+const JSON_ARRAY_FORMAT ='Respond with a raw JSON array of strings only: ["fact 1", "fact 2", ...]';
 
 /**
  * The prompt for one batch of new quotes.
- * @param {string[]} avoid quotes already in the pool; the newest 60 are named
- *   in the prompt so the model covers new ground.
+ * @param {string[]} avoid quotes already in the pool; the newest MAX_AVOID
+ *   are named in the prompt so the model covers new ground.
  * @param {{ topic?: string, responseFormat?: string }} options `topic` is a
  *   custom topic's name; `responseFormat` replaces the JSON array instruction.
  * @returns {{ prompt: string, targetCount: number, label: string, examples: string[] }}
@@ -292,12 +297,13 @@ ${sample(CATEGORY_SUBTOPICS[categoryKey], Math.min(targetCount, 8))
     ? "Quality bar. These are from other subjects; match their level of specificity for your topic:"
     : "Quality bar. Match this level of specificity, but do not reuse these facts or their phrasing:";
 
-  // Naming what's already stored is what actually forces new material. Send
-  // the most recent entries; the similarity filter catches the rest.
+  // Naming what's already stored is what actually forces new material. The
+  // similarity filter only catches near-verbatim copies, so a fact left off
+  // this list tends to come back reworded.
   const avoidBlock =
     avoid.length > 0
       ? `\n\nALREADY IN THE POOL. Do not restate, reword, or cover the same specific fact as any of these:\n${avoid
-          .slice(-60)
+          .slice(-MAX_AVOID)
           .map((q) => `- ${q}`)
           .join("\n")}`
       : "";

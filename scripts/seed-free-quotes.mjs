@@ -128,8 +128,8 @@ async function generate(category, avoid) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function seedCategory(category) {
-  let { count, recent } = await convex("raceQuotes:freePoolForSeeding", { category });
-  const avoid = [...recent];
+  let { count, quotes: existing } = await convex("raceQuotes:freePoolForSeeding", { category });
+  const avoid = [...existing];
   let empty = 0;
   console.log(`${category}: ${count}/${TARGET}`);
   while (count < TARGET && empty < MAX_EMPTY_BATCHES) {

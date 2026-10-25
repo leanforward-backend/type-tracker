@@ -235,14 +235,14 @@ export const importFreeQuotes = internalMutation({
   },
 });
 
-/** A free pool's size and newest quotes, so the seed script can ask for new ground. */
+/** A free pool's size and every quote in it, oldest first, so the seed script can ask for new ground. */
 export const freePoolForSeeding = internalQuery({
   args: {
     category: v.string(),
   },
   handler: async (ctx, args) => {
     const free = await poolQuotes(ctx, args.category, "free");
-    return { count: free.length, recent: free.slice(-60).map((q) => q.quote) };
+    return { count: free.length, quotes: free.map((q) => q.quote) };
   },
 });
 
