@@ -148,6 +148,9 @@ const DEFAULT_MODELS = [
 // correct when the next release lands. VITE_GEMINI_MODEL still wins outright.
 const DEMOTE_NEWEST_MODEL = true;
 
+// Older Flash generations reject `thinkingLevel` and are being retired.
+const MIN_FLASH_VERSION = 3;
+
 // Gemini 3.x models think by default and spend far more tokens reasoning than
 // answering. "low" keeps quality for these prompts while cutting
 // time-to-first-token. Models that reject the field get it stripped
@@ -497,6 +500,10 @@ function isEligibleModel(m) {
   // not text chat models at all.
   const excluded = ["omni", "preview", "lite", "exp", "image", "audio", "tts", "live", "native", "transcribe", "embedding", "robotics", "computer"];
   if (excluded.some((word) => name.includes(word))) return false;
+  // ListModels keeps advertising 2.x long after it stops serving it. Once one
+  // of those answered, it became `lastGood` and jumped every queue after that.
+  const version = flashVersion(name);
+  if (version > 0 && version < MIN_FLASH_VERSION) return false;
   const actions = m?.supportedActions;
   return !Array.isArray(actions) || actions.includes("generateContent");
 }
