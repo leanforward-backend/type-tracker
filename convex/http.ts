@@ -19,11 +19,12 @@ const GEMINI_ORIGIN = "https://generativelanguage.googleapis.com";
 const PREFIX = "/gemini/";
 
 // Only the calls the app makes: ListModels (GET) and generateContent /
-// streamGenerateContent on a Flash model (POST). Anything else is refused so a
-// signed-in user can't use the key for files, tuning, embeddings and so on.
+// streamGenerateContent on allowed Gemini models (POST). Anything else is
+// refused so a signed-in user can't use the key for files, tuning, embeddings,
+// or pricier frontier tiers.
 const LIST_PATH = /^v1beta\/models$/;
 const GENERATE_PATH =
-  /^v1beta\/models\/gemini-[a-z0-9.-]*flash[a-z0-9.-]*:(generateContent|streamGenerateContent)$/;
+  /^v1beta\/models\/(?:gemini-[a-z0-9.-]*flash[a-z0-9.-]*|gemini-4-hydrogen[a-z0-9.-]*):(generateContent|streamGenerateContent)$/;
 
 // Chat history is resent every turn, so this has to allow a long conversation.
 const MAX_BODY_BYTES = 512 * 1024;

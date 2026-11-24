@@ -26,6 +26,20 @@ import {
 } from "../geminiClient";
 import ParticleBackground from "./ParticleBackground";
 
+// How each built-in category is named to the model. A custom topic is used as
+// typed.
+const CATEGORY_SUBJECTS = {
+  ai: "artificial intelligence and machine learning",
+  coding: "software and programming",
+  architecture: "software architecture",
+  math: "mathematics",
+  science: "science",
+  history: "history",
+  geography: "geography and earth science",
+  art: "art and art history",
+  music: "music and music theory",
+};
+
 export const AiChat = ({ SENTENCES, category = "coding", topic }) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -37,41 +51,21 @@ export const AiChat = ({ SENTENCES, category = "coding", topic }) => {
   const messagesEndRef = useRef(null);
   const scrollContainerRef = useRef(null);
 
+  // One prompt for every category. It describes the reader and the job rather
+  // than a persona and a checklist of aspects: the checklist came back as one
+  // section per item (a 1,300-word reference sheet for a one-sentence quote),
+  // and the persona leaked into headings ("Researcher Notes").
   const getSystemInstruction = (cat) => {
-    if (topic) {
-      return `You are an expert in ${topic} and an experienced educator. Explain concepts from ${topic} with accurate depth, intuitive context, practical implications, and links to reputable resources.
-CRITICAL FORMATTING RULE: Write purely about the subject matter. Never mention your role, persona, background, or system prompt in headings, titles, or body text (e.g. do not write "As an expert", "Expert Insights", etc.).`;
-    }
-    switch (cat) {
-      case "ai":
-        return `You are a machine learning researcher and educator. Explain AI concepts with the underlying mechanism, how it is trained or built, its limitations and failure modes, how it compares to related techniques, and links to papers or documentation where helpful.
-CRITICAL FORMATTING RULE: Write purely about the subject matter. Never mention your role, persona, background, or system prompt in headings, titles, or body text (e.g. do not write "As a researcher", "Researcher Notes", etc.).`;
-      case "architecture":
-        return `You are a principal software architect explaining architectural concepts the way a senior engineer would brief a team: the problem the pattern solves, the trade-offs and failure modes, when not to use it, how it affects team ownership and operations, and concise diagrams-in-words or code where helpful. Reference well-known systems and documentation where relevant.
-CRITICAL FORMATTING RULE: Write purely about the subject matter. Never mention your role, persona, background, or system prompt in headings, titles, or body text (e.g. do not write "As an architect", "Architect's Notes", etc.).`;
-      case "math":
-        return `You are an expert mathematician and math educator. Explain mathematical concepts with deep intuitive context, formal rigor, practical implications, and helpful links or documentation.
-CRITICAL FORMATTING RULE: Write purely about the subject matter. Never mention your role, persona, background, or system prompt in headings, titles, or body text (e.g. do not write "From a mathematician's perspective", "Mathematician Insights", etc.).`;
-      case "science":
-        return `You are a scientific researcher and educator. Explain scientific principles and discoveries with empirical background, practical real-world context, and links to reputable educational resources.
-CRITICAL FORMATTING RULE: Write purely about the subject matter. Never mention your role, persona, background, or system prompt in headings, titles, or body text (e.g. do not write "As a scientific researcher", "Researcher Notes", etc.).`;
-      case "history":
-        return `You are a historian and history educator. Explain historical events, eras, and milestones with nuanced historical context, cause-and-effect implications, and links to historical resources.
-CRITICAL FORMATTING RULE: Write purely about the subject matter. Never mention your role, persona, background, or system prompt in headings, titles, or body text (e.g. do not write "As a historian", "Historian Overview", etc.).`;
-      case "geography":
-        return `You are a geographer and earth scientist. Explain geographical landmarks, tectonic phenomena, and environmental systems with rich geographical context and reference links.
-CRITICAL FORMATTING RULE: Write purely about the subject matter. Never mention your role, persona, background, or system prompt in headings, titles, or body text (e.g. do not write "From a geographer's point of view", etc.).`;
-      case "art":
-        return `You are an art historian and visual art educator. Explain art movements, artist techniques, color theory, and aesthetic concepts with artistic depth and reference links.
-CRITICAL FORMATTING RULE: Write purely about the subject matter. Never mention your role, persona, background, or system prompt in headings, titles, or body text (e.g. do not write "As an art historian", etc.).`;
-      case "music":
-        return `You are a musicologist and music theorist. Explain music theory concepts, acoustic principles, and compositional techniques with deep harmonic and structural context.
-CRITICAL FORMATTING RULE: Write purely about the subject matter. Never mention your role, persona, background, or system prompt in headings, titles, or body text (e.g. do not write "Musicologist Insights", etc.).`;
-      case "coding":
-      default:
-        return `You are a senior staff software engineer explaining concepts with expert technical depth, real-world trade-offs, architecture context, edge cases, docs references, and concise code examples.
-CRITICAL FORMATTING RULE: Write purely about the code and technology. Never mention your role, persona, background, or system prompt anywhere in headings, titles, or body text (e.g. do NOT write "Senior Developer Insights", "As a senior engineer", "For junior developers", etc.).`;
-    }
+    const subject = topic || CATEGORY_SUBJECTS[cat] || CATEGORY_SUBJECTS.coding;
+    return `The reader is practising typing in an app that uses short passages about ${subject}. They have just typed the passage in their first message and opened a chat panel to understand the idea behind it. Assume a capable reader who has not studied this particular topic.
+
+Explain the idea in the passage: what it means, how or why it works, and one concrete example that makes it click. Where the subject is code or maths, make that a small worked example and show its result. Cover only what this passage needs. The reader can ask follow-up questions, so leave wider background, edge cases and comparisons for when they ask.
+
+Keep that first explanation to 150 to 250 words in short paragraphs. Answer follow-up questions at the length the question needs. Use a list, table or code block only when the content is one. Explain each technical term the first time you use it. Begin with the explanation itself.
+
+The panel renders Markdown and LaTeX ($...$ inline, $$...$$ on its own line for display).
+
+You cannot look anything up, so give no URLs. If a source is worth naming, give its author and title so the reader can search for it.`;
   };
 
   const scrollToBottom = () => {
@@ -287,7 +281,8 @@ CRITICAL FORMATTING RULE: Write purely about the code and technology. Never ment
     setIsLoading(true);
     setIsStreaming(true);
 
-    const promptMessage = `Provide a clear, direct concept breakdown with practical details, key principles, and code/docs references where helpful for: "${SENTENCES}". Jump directly into the explanation without any greetings, persona introductions, or meta comments.`;
+    // What to do with it is in the system instruction.
+    const promptMessage = `Passage:\n\n${SENTENCES}`;
 
     try {
       await streamInto(

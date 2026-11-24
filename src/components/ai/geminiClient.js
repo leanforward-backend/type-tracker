@@ -136,17 +136,16 @@ export function getAiChoice() {
 // outage). Discovery is the real source of truth so this list going stale is
 // harmless as long as at least one entry still resolves.
 const DEFAULT_MODELS = [
+  "gemini-4-hydrogen",
   "gemini-3.7-flash",
   "gemini-3.6-flash",
   "gemini-3.5-flash",
   "gemini-flash-latest",
 ];
 
-// The newest Flash release is the one everybody piles onto, and the one that
-// keeps answering 503 "high demand". Start one release back and keep the
-// newest as a fallback. This is a rule, not a hardcoded name, so it stays
-// correct when the next release lands. VITE_GEMINI_MODEL still wins outright.
-const DEMOTE_NEWEST_MODEL = true;
+// When true, starts one release back and keeps the newest release as a
+// fallback. Disabled so Gemini 4 Hydrogen is tried first when available.
+const DEMOTE_NEWEST_MODEL = false;
 
 // Older Flash generations reject `thinkingLevel` and are being retired.
 const MIN_FLASH_VERSION = 3;
@@ -200,6 +199,11 @@ const MAX_TOTAL_ATTEMPTS = 8;
 // A response that came back 200 but failed the caller's own validation gets
 // re-rolled on the same model this many times before we move on.
 const MAX_REROLLS = 1;
+// A pinned model (e.g. Gemini 4 Hydrogen) that answers 503 "high demand" is
+// retried this many times, with a short jittered backoff, before we fall back.
+// A busy reply takes ~2s, while a Flash fallback can stall 30s before its
+// first token, so a couple of quick retries are usually the faster path.
+const PINNED_BUSY_RETRIES = 2;
 // A request that has produced nothing after this long is abandoned and the
 // next model is tried. The SDK has no timeout of its own, so without this one
 // stuck connection would hang a user action (and any lock around it) forever.
@@ -299,7 +303,10 @@ function isHardCode(code) {
  */
 export function markModelFailed(modelName, err) {
   if (!modelName) return;
-  const { code, retryDelayMs, quotaScope } = parseApiError(err);
+  const { code, retryDelayMs, quotaScope, message } = parseApiError(err);
+  // Our own proxy's allowlist (convex/http.ts) refuses with 403 "Not allowed:".
+  // A redeploy fixes that, so it must not count as a model gone for a day.
+  const proxyRefused = code === 403 && /Not allowed:/.test(message);
 
   let cooldown;
   if (code === 429) {
@@ -307,7 +314,7 @@ export function markModelFailed(modelName, err) {
     else if (quotaScope === "minute") cooldown = COOLDOWN_MS.perMinuteQuota;
     else cooldown = COOLDOWN_MS.unknownQuota;
     cooldown = Math.max(cooldown, retryDelayMs);
-  } else if ((code === 404 || code === 403) && isOpenRouterModel(modelName)) {
+  } else if (proxyRefused || ((code === 404 || code === 403) && isOpenRouterModel(modelName))) {
     // OpenRouter's 404 is usually "no provider matches these settings" (data
     // policy, required parameters), which is fixable, not a retired model.
     cooldown = COOLDOWN_MS.badRequest;
@@ -324,6 +331,16 @@ export function markModelFailed(modelName, err) {
   state.cooldowns[modelName] = { until: Date.now() + cooldown, code };
   if (state.lastGood === modelName && isHardCode(code)) state.lastGood = null;
   saveState();
+}
+
+/** Forgets a model's cooldown, e.g. after a proxy allowlist fix. */
+export function clearModelCooldown(modelName) {
+  delete state.cooldowns[modelName];
+  saveState();
+}
+if (typeof window !== "undefined") {
+  window.clearModelCooldown = clearModelCooldown;
+  window.getModelHealth = () => getModelHealth();
 }
 
 export function markModelGood(modelName) {
@@ -488,14 +505,17 @@ export function isRetryable(err) {
 let _discovery = null; // { promise, expiresAt }
 
 function flashVersion(name) {
-  // "gemini-3.8-flash" -> 3.8, "gemini-4-flash-001" -> 4, "gemini-flash-latest" -> 0.
-  const match = name.match(/^gemini-(\d+(?:\.\d+)?)-flash/);
+  // "gemini-4-hydrogen" -> 4, "gemini-3.8-flash" -> 3.8, "gemini-flash-latest" -> 0.
+  const match = name.match(/^gemini-(\d+(?:\.\d+)?)-(?:flash|hydrogen)/);
   return match ? parseFloat(match[1]) : 0;
 }
 
 function isEligibleModel(m) {
   const name = (m?.name || "").replace(/^models\//, "");
-  if (!name.startsWith("gemini-") || !name.includes("flash")) return false;
+  const isSupportedFamily =
+    name.startsWith("gemini-") &&
+    (name.includes("flash") || name.startsWith("gemini-4-hydrogen"));
+  if (!isSupportedFamily) return false;
   // Variants that either have no free-tier quota (preview/exp/lite/omni) or are
   // not text chat models at all.
   const excluded = ["omni", "preview", "lite", "exp", "image", "audio", "tts", "live", "native", "transcribe", "embedding", "robotics", "computer"];
@@ -587,17 +607,19 @@ async function discoverModels() {
 
 /**
  * Splits the pool into the order we'll actually call it in:
- *   1. the caller's preferred model (the one its live session is on),
- *   2. whatever worked most recently (persisted, survives reloads),
- *   3. every other model not on cooldown, newest first,
- *   4. models on a *transient* cooldown (503 etc.), soonest-to-expire first.
+ *   1. explicitly pinned models (`VITE_GEMINI_MODEL` or `choice.models`),
+ *      even on a transient cooldown,
+ *   2. the caller's preferred model (the one its live session is on),
+ *   3. whatever worked most recently (persisted, survives reloads),
+ *   4. every other model not on cooldown, newest first,
+ *   5. models on a *transient* cooldown (503 etc.), soonest-to-expire first.
  * Models on a hard cooldown (429 / 404 / 403 / 400) are left out entirely.
  *
- * With `fixedOrder` (an OpenRouter choice) steps 1 and 2 are skipped: the
+ * With `fixedOrder` (an OpenRouter choice) steps 1-3 are skipped: the
  * pool's order is the choice itself, and a model that last worked under a
  * different choice must not jump ahead of this one's first pick.
  */
-function orderCandidates(pool, preferredModel, { fixedOrder = false } = {}) {
+function orderCandidates(pool, preferredModel, { fixedOrder = false, pinnedModels = [] } = {}) {
   pruneExpired();
   const inPool = new Set(pool);
   const seen = new Set();
@@ -605,7 +627,7 @@ function orderCandidates(pool, preferredModel, { fixedOrder = false } = {}) {
   const parked = [];
   const blocked = [];
 
-  // Preferred / last-good only jump the queue if discovery still lists them.
+  // Preferred / pinned / last-good only jump the queue if discovery still lists them.
   // A model that has dropped off ListModels is not worth a request to confirm.
   const consider = (model) => {
     if (!model || seen.has(model) || !inPool.has(model)) return;
@@ -616,7 +638,26 @@ function orderCandidates(pool, preferredModel, { fixedOrder = false } = {}) {
     else parked.push({ model, until: cd.until });
   };
 
+  // Pinned models (the choice's own pick, e.g. Gemini 4 Hydrogen) always go
+  // first, even while parked after a 503: a busy reply comes back in ~2s,
+  // whereas the Flash fallbacks can sit 30s before their first token. Only a
+  // hard failure (quota, 404/403, bad request) keeps them out.
+  const first = [];
   if (!fixedOrder) {
+    for (const m of pinnedModels) {
+      if (!m || seen.has(m) || !inPool.has(m)) continue;
+      const cd = state.cooldowns[m];
+      if (cd && isHardCode(cd.code)) {
+        // The pool pass records it as blocked. Say so: otherwise a pinned
+        // model silently vanishes from the order for up to a day.
+        console.warn(
+          `[geminiClient] Pinned model '${m}' skipped: HTTP ${cd.code} cooldown, ${Math.round((cd.until - Date.now()) / 60000)} min left. Clear with clearModelCooldown('${m}').`
+        );
+        continue;
+      }
+      seen.add(m);
+      first.push(m);
+    }
     consider(preferredModel);
     consider(state.lastGood);
   }
@@ -624,18 +665,38 @@ function orderCandidates(pool, preferredModel, { fixedOrder = false } = {}) {
 
   parked.sort((a, b) => a.until - b.until);
   return {
-    candidates: [...ready, ...parked.map((p) => p.model)],
+    candidates: [...first, ...ready, ...parked.map((p) => p.model)],
     blocked,
   };
 }
 
+function getPinnedGeminiModels(choice = getAiChoice()) {
+  if (choice.provider !== "gemini") return [];
+  const pinned = [];
+  if (env.VITE_GEMINI_MODEL) pinned.push(env.VITE_GEMINI_MODEL);
+  for (const m of choice.models ?? []) {
+    if (m && !pinned.includes(m)) pinned.push(m);
+  }
+  return pinned;
+}
+
+async function resolveGeminiPool(choice = getAiChoice()) {
+  const pinnedModels = getPinnedGeminiModels(choice);
+  const discovered = await discoverModels();
+  const pool =
+    pinnedModels.length > 0
+      ? [...pinnedModels, ...discovered.filter((m) => !pinnedModels.includes(m))]
+      : discovered;
+  return { pool, pinnedModels };
+}
+
 /**
- * Gemini Flash models in the order `withModelFallback` would try them right
- * now. Never empty unless every model is on a hard cooldown.
+ * Gemini models in the order `withModelFallback` would try them right now.
+ * Never empty unless every model is on a hard cooldown.
  */
 export async function getAvailableFlashModels(preferredModel = null) {
-  const pool = await discoverModels();
-  return orderCandidates(pool, preferredModel).candidates;
+  const { pool, pinnedModels } = await resolveGeminiPool();
+  return orderCandidates(pool, preferredModel, { pinnedModels }).candidates;
 }
 
 // ---------------------------------------------------------------------------
@@ -757,8 +818,19 @@ export async function withModelFallback(fn, options = {}) {
 
   const choice = getAiChoice();
   const fixedOrder = !explicitModels && choice.provider === "openrouter";
-  const pool = explicitModels ?? (fixedOrder ? choice.models : await discoverModels());
-  let { candidates, blocked } = orderCandidates(pool, preferredModel, { fixedOrder });
+  let pool;
+  let pinnedModels = [];
+  if (explicitModels) {
+    pool = explicitModels;
+  } else if (fixedOrder) {
+    pool = choice.models;
+  } else {
+    ({ pool, pinnedModels } = await resolveGeminiPool(choice));
+  }
+  let { candidates, blocked } = orderCandidates(pool, preferredModel, {
+    fixedOrder,
+    pinnedModels,
+  });
 
   if (candidates.length === 0) {
     // Everything is parked for a reason a retry can't fix, almost always daily
@@ -778,6 +850,7 @@ export async function withModelFallback(fn, options = {}) {
       if (attempts >= maxTotalAttempts) break;
 
       let rerolls = 0;
+      let busyRetries = 0;
       let thinkingConfig = thinkingConfigFor(model);
 
       // Inner loop only repeats the *same* model for things that don't reflect
@@ -841,6 +914,16 @@ export async function withModelFallback(fn, options = {}) {
             thinkingConfig = undefined;
             if (attempts < maxTotalAttempts) continue;
             break;
+          }
+
+          if (
+            info.code === 503 &&
+            pinnedModels.includes(model) &&
+            busyRetries < PINNED_BUSY_RETRIES &&
+            attempts < maxTotalAttempts
+          ) {
+            await sleep(backoffDelay(busyRetries++, info.retryDelayMs));
+            continue;
           }
 
           markModelFailed(model, err);

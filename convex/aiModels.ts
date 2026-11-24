@@ -73,10 +73,19 @@ export type AiChoice = {
 export const AI_CHOICES: AiChoice[] = [
   {
     id: "gemini",
-    label: "Gemini Flash",
-    description: "Google Gemini 3.x Flash, called directly. The original setup.",
+    label: "Gemini Flash / Hydrogen",
+    description:
+      "Google Gemini 4 Hydrogen and 3.x Flash, called directly. Tries the newest available model first.",
     provider: "gemini",
     models: [],
+  },
+  {
+    id: "gemini-hydrogen",
+    label: "Gemini 4 Hydrogen",
+    description:
+      "Google Gemini 4 Hydrogen, called directly. Falls back to Gemini 3.x Flash if busy or out of quota.",
+    provider: "gemini",
+    models: ["gemini-4-hydrogen"],
   },
   {
     id: "best",
